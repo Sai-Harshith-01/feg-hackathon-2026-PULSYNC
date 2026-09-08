@@ -55,11 +55,9 @@ function Inner() {
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Receipt className="size-4" /> Responsible gaming (demo)
+            <Receipt className="size-4" /> FEG Dataset Profile
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Deposit and session limits are simulated in this environment. No real money or self-exclusion applies.
-          </p>
+          <ProfileIntelligenceCard />
         </Card>
       </div>
 
@@ -85,6 +83,33 @@ function Inner() {
           </div>
         )}
       </Card>
+    </div>
+  )
+}
+
+function ProfileIntelligenceCard() {
+  const { data } = useSWR<{
+    preferred_sport?: string
+    activity_level?: string
+    historical_activity?: { total_actions: number; unique_sports_explored: number }
+  }>("/api/users/usr_demo/profile")
+
+  if (!data) return <Skeleton className="mt-2 h-16" />
+
+  return (
+    <div className="mt-2 flex flex-col gap-1 text-xs">
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Preferred Sport:</span>
+        <span className="font-bold">{data.preferred_sport ?? "Football"}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Activity Level:</span>
+        <Badge variant="success">{data.activity_level ?? "HIGH"}</Badge>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Dataset Actions:</span>
+        <span className="font-mono font-semibold">{data.historical_activity?.total_actions ?? 2540}</span>
+      </div>
     </div>
   )
 }

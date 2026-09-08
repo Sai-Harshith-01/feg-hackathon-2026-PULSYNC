@@ -5,9 +5,21 @@ import { serializeEvent } from "@/lib/server/serialize"
 import { ok } from "@/lib/server/api"
 
 export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  try {
+    const backendUrl = new URL("http://127.0.0.1:8000/api/events")
+    searchParams.forEach((val, key) => backendUrl.searchParams.set(key, val))
+    const res = await fetch(backendUrl.toString(), { cache: "no-store" })
+    if (res.ok) {
+      const data = await res.json()
+      return Response.json(data)
+    }
+  } catch (e) {
+    // Backend offline fallback
+  }
+
   tickSimulation()
   const db = getDb()
-  const { searchParams } = new URL(req.url)
   const sportSlug = searchParams.get("sport")
   const status = searchParams.get("status")
   const day = searchParams.get("day") // today | tomorrow | all

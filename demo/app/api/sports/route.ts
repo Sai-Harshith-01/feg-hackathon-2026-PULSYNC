@@ -3,6 +3,16 @@ import { tickSimulation } from "@/lib/server/simulation"
 import { ok } from "@/lib/server/api"
 
 export async function GET() {
+  try {
+    const res = await fetch("http://127.0.0.1:8000/api/sports", { cache: "no-store" })
+    if (res.ok) {
+      const data = await res.json()
+      return Response.json(data)
+    }
+  } catch (e) {
+    // Backend offline fallback
+  }
+
   tickSimulation()
   const db = getDb()
   const sports = [...db.sports]

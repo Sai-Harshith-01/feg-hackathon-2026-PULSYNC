@@ -4,6 +4,16 @@ import { userHasPermission } from "@/lib/server/session"
 import { NextResponse } from "next/server"
 
 export async function GET() {
+  try {
+    const backendRes = await fetch("http://127.0.0.1:8000/api/analytics", { cache: "no-store" })
+    if (backendRes.ok) {
+      const data = await backendRes.json()
+      return Response.json(data)
+    }
+  } catch (e) {
+    // Fallback to local store
+  }
+
   const res = await requireUser()
   if (res instanceof NextResponse) return res
   // analytics.read OR admin gets full; otherwise still allow read of high-level for staff dashboards

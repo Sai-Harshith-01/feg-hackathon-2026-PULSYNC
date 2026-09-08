@@ -5,8 +5,18 @@ import { serializeEventDetail } from "@/lib/server/serialize"
 import { err, ok } from "@/lib/server/api"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  tickSimulation()
   const { id } = await params
+  try {
+    const res = await fetch(`http://127.0.0.1:8000/api/events/${id}`, { cache: "no-store" })
+    if (res.ok) {
+      const data = await res.json()
+      return Response.json(data)
+    }
+  } catch (e) {
+    // Backend offline fallback
+  }
+
+  tickSimulation()
   const db = getDb()
   const ev = db.events.find((e) => e.id === id)
   if (!ev) return err("Event not found", 404)
