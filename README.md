@@ -41,15 +41,23 @@ Open http://localhost:3000. Stop the container with `docker compose down`.
 ├── demo/
 │   ├── app/              # Next.js pages and mock API routes
 │   ├── components/       # UI components
-│   ├── lib/              # Client, domain, and server helpers
+│   ├── lib/              # Client, session, domain, and server helpers
 │   ├── public/           # Static assets
+│   ├── screenshots/      # Submission screenshots
+│   ├── presentation/     # Submission presentation materials
+│   ├── .dockerignore
 │   ├── Dockerfile
+│   ├── next.config.mjs
 │   ├── package.json
 │   └── pnpm-lock.yaml
-├── docs/                 # Project documentation
+├── docs/                 # Architecture, impact, compliance, and API contract
+├── src/                  # Reserved for integrated application source
+├── tests/                # Repository-level validation
+├── assets/               # Shared project assets
+├── config/               # Shared project configuration
 ├── docker-compose.yml
-├── requirements.txt
 ├── .env.example
+├── requirements.txt
 └── README.md
 ```
 
