@@ -436,3 +436,271 @@ def start_demo_session(payload: Optional[DemoStartRequest] = None, db: Session =
     uid = payload.user_id if payload else "demo_fan_01"
     mid = payload.match_id if payload else "match_el_clasico"
     return DemoSimulationService.run_demo_simulation(db, user_id=uid, match_id=mid)
+
+
+# ==================================================
+# Frontend Compatibility Endpoints (Sports, Events, Auth, Wallet, Promotions)
+# ==================================================
+@app.get("/api/auth/me", tags=["Auth"])
+def get_auth_me():
+    return {
+        "user": {
+            "id": "usr_demo",
+            "email": "fan@pulsync.ai",
+            "displayName": "Sports Enthusiast",
+            "roles": ["customer", "bettor"],
+            "status": "active",
+            "city": "London"
+        },
+        "permissions": ["view_events", "place_bets", "view_intelligence"],
+        "portal": "customer",
+        "wallet": {
+            "available": 1000.0,
+            "bonus": 50.0,
+            "currency": "EUR"
+        }
+    }
+
+
+@app.post("/api/auth/login", tags=["Auth"])
+def auth_login():
+    return {
+        "ok": True,
+        "token": "demo_jwt_token",
+        "user": {
+            "id": "usr_demo",
+            "email": "fan@pulsync.ai",
+            "displayName": "Sports Enthusiast",
+            "roles": ["customer"]
+        }
+    }
+
+
+@app.post("/api/auth/logout", tags=["Auth"])
+def auth_logout():
+    return {"ok": True}
+
+
+@app.get("/api/sports", tags=["Sports & Events"])
+def list_sports_rail():
+    return {
+        "sports": [
+            {"id": "football", "slug": "football", "name": "Football", "eventCount": 12, "liveCount": 3},
+            {"id": "basketball", "slug": "basketball", "name": "Basketball", "eventCount": 8, "liveCount": 1},
+            {"id": "tennis", "slug": "tennis", "name": "Tennis", "eventCount": 6, "liveCount": 2},
+            {"id": "ice_hockey", "slug": "ice_hockey", "name": "Ice Hockey", "eventCount": 4, "liveCount": 0},
+            {"id": "baseball", "slug": "baseball", "name": "Baseball", "eventCount": 5, "liveCount": 1}
+        ]
+    }
+
+
+@app.get("/api/promotions", tags=["Promotions"])
+def get_promotions():
+    banners = [
+        {"id": "p1", "title": "PULSYNC Live Intelligence", "subtitle": "AI-powered real-time sports analytics", "theme": "sports"},
+        {"id": "p2", "title": "Contextual Guidance Active", "subtitle": "Right Information at the Right Time", "theme": "live"},
+        {"id": "p3", "title": "Session Quality Tracking", "subtitle": "Friction-free exploration experience", "theme": "casino"}
+    ]
+    promotions = [
+        {"id": "p1", "title": "PULSYNC Live Intelligence", "subtitle": "AI-powered real-time sports analytics", "theme": "sports", "status": "PUBLISHED", "description": "Explore real-time telemetry and contextual guidance."},
+        {"id": "p2", "title": "Contextual Guidance Active", "subtitle": "Right Information at the Right Time", "theme": "live", "status": "PUBLISHED", "description": "Automated insights and head-to-head comparison tools."},
+        {"id": "p3", "title": "Session Quality Tracking", "subtitle": "Friction-free exploration experience", "theme": "sports", "status": "PUBLISHED", "description": "Continuous telemetry monitoring with personalized suggestions."}
+    ]
+    return {"banners": banners, "promotions": promotions}
+
+
+@app.get("/api/events", tags=["Sports & Events"])
+def list_events_feed(sport: Optional[str] = "all", day: Optional[str] = "all", status: Optional[str] = None):
+    now = datetime.datetime.utcnow()
+    events_data = [
+        {
+            "id": "match_rma_bar",
+            "home": "Real Madrid",
+            "away": "FC Barcelona",
+            "startsAt": (now + datetime.timedelta(hours=2)).isoformat() + "Z",
+            "status": "UPCOMING",
+            "homeScore": 0,
+            "awayScore": 0,
+            "clockSeconds": 0,
+            "sport": {"name": "Football", "slug": "football"},
+            "competition": {"name": "La Liga"},
+            "marketCount": 18,
+            "primaryMarket": {"id": "m1", "name": "Match Result", "status": "OPEN"},
+            "primarySelections": [
+                {"id": "sel_1", "name": "Real Madrid", "odds": 2.10},
+                {"id": "sel_2", "name": "Draw", "odds": 3.40},
+                {"id": "sel_3", "name": "FC Barcelona", "odds": 3.10}
+            ]
+        },
+        {
+            "id": "match_mci_ars",
+            "home": "Manchester City",
+            "away": "Arsenal",
+            "startsAt": (now + datetime.timedelta(hours=4)).isoformat() + "Z",
+            "status": "UPCOMING",
+            "homeScore": 0,
+            "awayScore": 0,
+            "clockSeconds": 0,
+            "sport": {"name": "Football", "slug": "football"},
+            "competition": {"name": "Premier League"},
+            "marketCount": 24,
+            "primaryMarket": {"id": "m2", "name": "Match Result", "status": "OPEN"},
+            "primarySelections": [
+                {"id": "sel_4", "name": "Man City", "odds": 1.95},
+                {"id": "sel_5", "name": "Draw", "odds": 3.60},
+                {"id": "sel_6", "name": "Arsenal", "odds": 3.80}
+            ]
+        },
+        {
+            "id": "match_alcaraz_sinner",
+            "home": "C. Alcaraz",
+            "away": "J. Sinner",
+            "startsAt": now.isoformat() + "Z",
+            "status": "LIVE",
+            "homeScore": 1,
+            "awayScore": 1,
+            "clockSeconds": 4820,
+            "sport": {"name": "Tennis", "slug": "tennis"},
+            "competition": {"name": "ATP Masters"},
+            "marketCount": 12,
+            "primaryMarket": {"id": "m3", "name": "Match Winner", "status": "OPEN"},
+            "primarySelections": [
+                {"id": "sel_7", "name": "C. Alcaraz", "odds": 1.85},
+                {"id": "sel_8", "name": "J. Sinner", "odds": 1.95}
+            ]
+        },
+        {
+            "id": "match_lal_gsw",
+            "home": "LA Lakers",
+            "away": "Golden State Warriors",
+            "startsAt": (now + datetime.timedelta(hours=6)).isoformat() + "Z",
+            "status": "UPCOMING",
+            "homeScore": 0,
+            "awayScore": 0,
+            "clockSeconds": 0,
+            "sport": {"name": "Basketball", "slug": "basketball"},
+            "competition": {"name": "NBA"},
+            "marketCount": 15,
+            "primaryMarket": {"id": "m4", "name": "Moneyline", "status": "OPEN"},
+            "primarySelections": [
+                {"id": "sel_9", "name": "Lakers", "odds": 1.75},
+                {"id": "sel_10", "name": "Warriors", "odds": 2.15}
+            ]
+        }
+    ]
+    if sport and sport.lower() != "all":
+        events_data = [e for e in events_data if e["sport"]["slug"] == sport.lower()]
+    if status and status.lower() == "live":
+        events_data = [e for e in events_data if e["status"] == "LIVE"]
+    return {"events": events_data, "total": len(events_data)}
+
+
+@app.get("/api/events/{id}", tags=["Sports & Events"])
+def get_event_detail(id: str):
+    now = datetime.datetime.utcnow()
+    return {
+        "event": {
+            "id": id,
+            "home": "Real Madrid",
+            "away": "FC Barcelona",
+            "startsAt": (now + datetime.timedelta(hours=2)).isoformat() + "Z",
+            "status": "UPCOMING",
+            "homeScore": 0,
+            "awayScore": 0,
+            "clockSeconds": 0,
+            "competition": {"name": "La Liga"},
+            "sport": {"name": "Football"},
+            "markets": [
+                {
+                    "id": "m_result",
+                    "name": "Match Result (1X2)",
+                    "status": "OPEN",
+                    "selections": [
+                        {"id": "sel_1", "name": "Real Madrid", "odds": 2.10, "status": "ACTIVE"},
+                        {"id": "sel_2", "name": "Draw", "odds": 3.40, "status": "ACTIVE"},
+                        {"id": "sel_3", "name": "FC Barcelona", "odds": 3.10, "status": "ACTIVE"}
+                    ]
+                },
+                {
+                    "id": "m_overunder",
+                    "name": "Total Goals (Over/Under 2.5)",
+                    "status": "OPEN",
+                    "selections": [
+                        {"id": "sel_ou_1", "name": "Over 2.5", "odds": 1.70, "status": "ACTIVE"},
+                        {"id": "sel_ou_2", "name": "Under 2.5", "odds": 2.15, "status": "ACTIVE"}
+                    ]
+                }
+            ]
+        }
+    }
+
+
+@app.get("/api/wallet", tags=["Wallet"])
+def get_wallet():
+    return {
+        "wallet": {
+            "available": 1000.0,
+            "bonus": 50.0,
+            "currency": "EUR"
+        },
+        "transactions": [
+            {"id": "tx_1", "type": "DEPOSIT", "amount": 100.0, "status": "COMPLETED", "created_at": datetime.datetime.utcnow().isoformat() + "Z"}
+        ]
+    }
+
+
+@app.get("/api/bets", tags=["Bets"])
+def list_bets(filter: Optional[str] = "open"):
+    return {"bets": []}
+
+
+@app.post("/api/bets", tags=["Bets"])
+def place_bet():
+    return {"ok": True, "betId": f"bet_{uuid.uuid4().hex[:8]}"}
+
+
+@app.get("/api/casino", tags=["Casino"])
+def list_casino_games(category: Optional[str] = "all"):
+    return {"games": [], "categories": ["slots", "table", "live"]}
+
+
+@app.get("/api/notifications", tags=["System"])
+def get_notifications():
+    return {"notifications": [], "unread": 0}
+
+
+@app.get("/api/analytics", tags=["Dashboard"])
+def get_frontend_analytics(db: Session = Depends(get_db)):
+    metrics = DashboardAnalyticsService.get_metrics(db)
+    return {"kpis": metrics, **metrics}
+
+
+@app.get("/api/admin/audit", tags=["Admin"])
+def get_admin_audit(q: Optional[str] = ""):
+    return {"logs": [], "total": 0}
+
+
+@app.get("/api/admin/flags", tags=["Admin"])
+def get_admin_flags():
+    return {"flags": [], "settings": []}
+
+
+@app.get("/api/ops/events", tags=["Admin"])
+def get_ops_events(status: Optional[str] = "all"):
+    return {"events": []}
+
+
+@app.get("/api/risk", tags=["Admin"])
+def get_risk_alerts(status: Optional[str] = "all"):
+    return {"alerts": []}
+
+
+@app.get("/api/ledger", tags=["Admin"])
+def get_ledger(q: Optional[str] = ""):
+    return {"entries": []}
+
+
+@app.get("/api/support", tags=["Support"])
+def get_support_tickets():
+    return {"tickets": []}
+

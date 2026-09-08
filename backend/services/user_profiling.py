@@ -17,16 +17,32 @@ class UserProfilingService:
     
     @classmethod
     def get_or_create_user(cls, db: Session, user_id: str, anonymous_id: Optional[str] = None) -> UserProfile:
+        # Check by id first
         user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
+        if not user and anonymous_id:
+            user = db.query(UserProfile).filter(
+                (UserProfile.anonymous_id == anonymous_id) | (UserProfile.id == anonymous_id)
+            ).first()
         if not user:
-            user = UserProfile(
-                id=user_id,
-                anonymous_id=anonymous_id or f"anon_{uuid.uuid4().hex[:10]}",
-                segment="Casual Explorer"
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            anon = anonymous_id or f"anon_{uuid.uuid4().hex[:10]}"
+            # Verify if this anonymous_id already exists in db
+            existing_anon = db.query(UserProfile).filter(UserProfile.anonymous_id == anon).first()
+            if existing_anon:
+                return existing_anon
+            try:
+                user = UserProfile(
+                    id=user_id,
+                    anonymous_id=anon,
+                    segment="Casual Explorer"
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            except Exception:
+                db.rollback()
+                user = db.query(UserProfile).filter(
+                    (UserProfile.id == user_id) | (UserProfile.anonymous_id == anon)
+                ).first()
         return user
 
     @classmethod
