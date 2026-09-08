@@ -303,3 +303,17 @@ class DemoStartResponse(BaseModel):
     events_triggered: List[Dict[str, Any]]
     final_intelligence: SessionIntelligenceResponse
     message: str = "Demo session successfully executed through full behavioral cycle."
+
+# ==================================================
+# Impact & ROI Intelligence Schemas (Machine 4)
+# ==================================================
+class ROISimulationRequest(BaseModel):
+    scenario: Optional[str] = "base"
+    scenario_realization_pct: Optional[float] = 50.0
+    inference_cost_per_call: Optional[float] = 0.005
+    api_cost_per_call: Optional[float] = 0.002
+    hosting_cost_monthly: Optional[float] = 500.0
+    storage_cost_monthly: Optional[float] = 200.0
+    engineering_cost: Optional[float] = 25000.0
+    monthly_sessions: Optional[int] = 100000
+

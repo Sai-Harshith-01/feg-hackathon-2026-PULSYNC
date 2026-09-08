@@ -29,12 +29,13 @@ from backend.schemas import (
     MatchResponse,
     DashboardMetricsResponse, DashboardSegmentsResponse,
     DashboardRecommendationsResponse, DashboardQualityResponse, DashboardImpactResponse,
-    DemoStartRequest
+    DemoStartRequest, ROISimulationRequest
 )
 from backend.services.user_profiling import UserProfilingService
 from backend.services.session_intelligence import SessionIntelligenceService
 from backend.services.dashboard_service import DashboardAnalyticsService
 from backend.services.demo_service import DemoSimulationService
+from backend.services.impact_service import ImpactAnalyticsService
 
 # Initialize database schema if not already present
 Base.metadata.create_all(bind=engine)
@@ -1081,4 +1082,70 @@ def get_ledger(q: Optional[str] = ""):
 @app.get("/api/support", tags=["Support"])
 def get_support_tickets():
     return {"tickets": []}
+
+
+# ==================================================
+# PULSYNC Session & ROI Intelligence API (Machine 4)
+# ==================================================
+@app.get("/api/impact/summary", tags=["Impact Intelligence"])
+def get_impact_summary():
+    """Returns top KPI summary, dataset facts, target segment metrics, and replay preview."""
+    return ImpactAnalyticsService.get_summary()
+
+
+@app.get("/api/impact/session-health", tags=["Impact Intelligence"])
+def get_impact_session_health():
+    """Returns session health funnel, durations, friction, quality, and daily trends."""
+    return ImpactAnalyticsService.get_session_health()
+
+
+@app.get("/api/impact/matrix", tags=["Impact Intelligence"])
+def get_impact_matrix():
+    """Returns 3x3 Transaction Intent vs Information Interest matrix."""
+    return ImpactAnalyticsService.get_matrix()
+
+
+@app.get("/api/impact/segments", tags=["Impact Intelligence"])
+def get_impact_segments():
+    """Returns 5 behavioral segments with metrics and shares."""
+    return ImpactAnalyticsService.get_segments()
+
+
+@app.get("/api/impact/replay", tags=["Impact Intelligence"])
+def get_impact_replay():
+    """Returns historical replay comparison between VALUE_SEEKING and RESPECT_EXIT cohorts with statistical test results."""
+    return ImpactAnalyticsService.get_replay()
+
+
+@app.get("/api/impact/opportunity", tags=["Impact Intelligence"])
+def get_impact_opportunity():
+    """Returns segment opportunity sizing for VALUE_SEEKING."""
+    return ImpactAnalyticsService.get_opportunity()
+
+
+@app.post("/api/impact/roi/simulate", tags=["Impact Intelligence"])
+def simulate_roi(payload: Optional[ROISimulationRequest] = None):
+    """Interactive ROI simulator supporting Conservative, Base, Optimistic scenarios and custom assumptions."""
+    assumptions = payload.model_dump() if payload else {}
+    return ImpactAnalyticsService.calculate_roi(assumptions)
+
+
+@app.get("/api/impact/impact-case", tags=["Impact Intelligence"])
+def get_impact_case(scenario: Optional[str] = "base"):
+    """Auto-generates the one-page executive Impact Case."""
+    return ImpactAnalyticsService.get_impact_case(scenario or "base")
+
+
+@app.get("/api/impact/methodology", tags=["Impact Intelligence"])
+def get_impact_methodology():
+    """Returns data methodology, definitions, and causal limitation disclaimers."""
+    data = ImpactAnalyticsService.get_raw_data()
+    return data.get("methodology", {})
+
+
+@app.get("/api/impact/metrics-chain", tags=["Impact Intelligence"])
+def get_impact_metrics_chain():
+    """Returns 4-level business metrics to follow and management signals."""
+    return ImpactAnalyticsService.get_metrics_chain()
+
 

@@ -5,6 +5,7 @@ import LiveView from '../views/LiveView.vue'
 import PromotionsView from '../views/PromotionsView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import PortalView from '../views/PortalView.vue'
+import ImpactView from '../views/ImpactView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -16,6 +17,8 @@ const router = createRouter({
     { path: '/profile', name: 'profile', component: ProfileView },
     { path: '/portal', name: 'portal', component: PortalView },
     { path: '/portal/analytics', name: 'portal-analytics', component: PortalView },
+    { path: '/impact', name: 'impact', component: ImpactView },
+    { path: '/analytics/impact', name: 'analytics-impact', component: ImpactView },
   ],
 })
 

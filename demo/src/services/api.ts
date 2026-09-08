@@ -74,6 +74,8 @@ export interface RecommendationItem {
   score: number
   reason: string
   action_label: string
+  content_id?: string
+  content_type?: string
 }
 
 export interface SessionIntel {
@@ -284,4 +286,276 @@ export async function placeBetApi(userId: string, selections: any[], stake: numb
     throw { eligible: false, status: 'BETTING_BLOCKED', reason: 'Betting placement failed.' }
   }
 }
+
+// ==================================================
+// PULSYNC Session & ROI Intelligence APIs (Machine 4)
+// ==================================================
+export interface ImpactKPI {
+  value: any
+  label: string
+  type: string
+  period?: string
+  share_pct?: number
+  badge?: string
+}
+
+export interface ImpactSummary {
+  dataset: {
+    name: string
+    records: number
+    players: number
+    sessions: number
+    date_start: string
+    date_end: string
+    unique_sports: number
+    inactivity_threshold_min: number
+    session_type: string
+    data_quality_score: number
+  }
+  kpi_cards: Record<string, ImpactKPI>
+  evidence: {
+    type: string
+    causal_claim: boolean
+    disclaimer: string
+  }
+}
+
+export interface FunnelStage {
+  stage: string
+  count: number
+  rate_pct: number
+}
+
+export interface DailyTrend {
+  date: string
+  sessions: number
+  active_players: number
+  value_seeking_sessions: number
+  respect_exit_sessions: number
+  abandonment_rate: number
+  return_7d_rate: number
+}
+
+export interface SessionHealthData {
+  total_sessions: number
+  active_players: number
+  average_duration_sec: number
+  actions_per_session: number
+  information_interactions_per_session: number
+  session_completion_rate: number
+  abandonment_rate: number
+  friction_score_avg: number
+  session_quality_avg: number
+  funnel: FunnelStage[]
+  daily_trends: DailyTrend[]
+}
+
+export interface MatrixCell {
+  transaction_intent: string
+  information_interest: string
+  sessions: number
+  players: number
+  session_share: number
+  player_share: number
+  return_7d_rate: number
+  is_pulsync_opportunity: boolean
+}
+
+export interface SegmentInfo {
+  name: string
+  sessions: number
+  players: number
+  session_share: number
+  player_share: number
+  return_1d_rate: number
+  return_3d_rate: number
+  return_7d_rate: number
+  subsequent_session_rate: number
+  subsequent_stake_rate: number
+  historical_stake_exposure: number
+  average_original_stake_eur: number
+  average_subsequent_stake_eur: number
+}
+
+export interface ReplayCohort {
+  name?: string
+  sessions: number
+  players: number
+  return_1d_rate: number
+  return_3d_rate: number
+  return_7d_rate: number
+  subsequent_session_rate: number
+  subsequent_stake_rate: number
+  avg_time_to_return_days: number
+}
+
+export interface ReplayData {
+  value_seeking: ReplayCohort
+  comparison_cohort: ReplayCohort
+  observed_difference_pp: number
+  relative_difference_pct: number
+  confidence_interval_95: [number, number]
+  z_statistic: number
+  p_value: string
+  statistically_significant: boolean
+  average_subsequent_stake_eur: number
+  evidence_type: string
+}
+
+export interface OpportunityData {
+  target_segment: string
+  definition: string
+  sessions: number
+  session_share_pct: number
+  players: number
+  player_share_pct: number
+  historical_stake_exposure_eur: number
+  return_7d_rate_pct: number
+  observed_gap_pp: number
+  relative_difference_pct: number
+  evidence_type: string
+}
+
+export interface ROISensitivityItem {
+  realization_pct: number
+  annual_value_eur: number
+  annual_net_value_eur: number
+  roi_percent: number
+  is_positive: boolean
+}
+
+export interface ROIWaterfallItem {
+  step: string
+  amount: number
+  unit: string
+}
+
+export interface ROISimulationResult {
+  scenario: string
+  inputs: {
+    scenario_realization_pct: number
+    inference_cost_per_call: number
+    api_cost_per_call: number
+    hosting_cost_monthly: number
+    storage_cost_monthly: number
+    engineering_cost: number
+    monthly_sessions: number
+    average_subsequent_stake: number
+  }
+  outputs: {
+    monthly_target_sessions: number
+    incremental_returning_sessions: number
+    monthly_scenario_value_eur: number
+    annual_scenario_value_eur: number
+    monthly_operating_cost_eur: number
+    annual_operating_cost_eur: number
+    monthly_net_value_eur: number
+    annual_net_value_eur: number
+    roi_percent: number
+    payback_months: number | null
+    payback_status: string
+  }
+  sensitivity: ROISensitivityItem[]
+  waterfall: ROIWaterfallItem[]
+}
+
+export interface ImpactCaseSection {
+  number: number
+  title: string
+  content: string
+}
+
+export interface ImpactCaseData {
+  title: string
+  tagline: string
+  sections: ImpactCaseSection[]
+  metrics: ROISimulationResult
+}
+
+export interface MethodologyData {
+  session_definition: string
+  session_type: string
+  information_interest_proxy: string
+  target_segment_definition: string
+  comparison_cohort: string
+  return_windows: string[]
+  statistical_test: string
+  causal_claim: boolean
+  causal_disclaimer: string
+}
+
+export interface MetricsChainLevel {
+  level: number
+  name: string
+  metrics: Array<{
+    name: string
+    target: string
+    current: string
+    status: string
+  }>
+}
+
+export interface MetricsChainData {
+  levels: MetricsChainLevel[]
+  signals: {
+    positive: string[]
+    negative_monitored: string[]
+    compliance_guardrails: Array<{
+      rule: string
+      violations: number
+      status: string
+    }>
+  }
+}
+
+export async function fetchImpactSummary(): Promise<ImpactSummary> {
+  const res = await api.get<ImpactSummary>('/api/impact/summary')
+  return res.data
+}
+
+export async function fetchImpactSessionHealth(): Promise<SessionHealthData> {
+  const res = await api.get<SessionHealthData>('/api/impact/session-health')
+  return res.data
+}
+
+export async function fetchImpactMatrix(): Promise<MatrixCell[]> {
+  const res = await api.get<MatrixCell[]>('/api/impact/matrix')
+  return res.data
+}
+
+export async function fetchImpactSegments(): Promise<Record<string, SegmentInfo>> {
+  const res = await api.get<Record<string, SegmentInfo>>('/api/impact/segments')
+  return res.data
+}
+
+export async function fetchImpactReplay(): Promise<ReplayData> {
+  const res = await api.get<ReplayData>('/api/impact/replay')
+  return res.data
+}
+
+export async function fetchImpactOpportunity(): Promise<OpportunityData> {
+  const res = await api.get<OpportunityData>('/api/impact/opportunity')
+  return res.data
+}
+
+export async function simulateROI(assumptions: any): Promise<ROISimulationResult> {
+  const res = await api.post<ROISimulationResult>('/api/impact/roi/simulate', assumptions)
+  return res.data
+}
+
+export async function fetchImpactCase(scenario: string = 'base'): Promise<ImpactCaseData> {
+  const res = await api.get<ImpactCaseData>(`/api/impact/impact-case?scenario=${scenario}`)
+  return res.data
+}
+
+export async function fetchImpactMethodology(): Promise<MethodologyData> {
+  const res = await api.get<MethodologyData>('/api/impact/methodology')
+  return res.data
+}
+
+export async function fetchImpactMetricsChain(): Promise<MetricsChainData> {
+  const res = await api.get<MetricsChainData>('/api/impact/metrics-chain')
+  return res.data
+}
+
 
