@@ -1,0 +1,50 @@
+name: FastAPI Branch CI
+
+on:
+  push:
+    branches:
+      - raj-uiux
+      - sai-tl
+      - ahsan-devops
+
+permissions:
+  contents: read
+
+jobs:
+  backend-ci:
+    name: FastAPI CI
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the exact commit that was pushed
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Python environment
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest ruff
+
+      # Code quality
+      - name: Run Ruff
+        run: |
+          ruff check backend
+
+      # Tests
+      - name: Run tests
+        run: |
+          pytest backend/tests -v
+
+      # Verify FastAPI application
+      - name: Verify FastAPI
+        run: |
+          python -c "from backend.app.main import app; print('FastAPI app loaded successfully')"
