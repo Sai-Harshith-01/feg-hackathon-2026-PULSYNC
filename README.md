@@ -14,3 +14,13 @@ pnpm dev
 
 Open http://localhost:3000 to view the demo. The demo uses its included mock data and
 API routes; it does not require the backend or AI workstreams.
+
+### Run with Docker
+
+From the repository root:
+
+```powershell
+docker compose up --build
+```
+
+Open http://localhost:3000. Stop the container with `docker compose down`.
