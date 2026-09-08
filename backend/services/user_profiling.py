@@ -1,5 +1,5 @@
-import uuid
 from typing import Dict, Any, Optional
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from backend.models import UserProfile, Session as DBSession, Event
 
@@ -17,32 +17,38 @@ class UserProfilingService:
     
     @classmethod
     def get_or_create_user(cls, db: Session, user_id: str, anonymous_id: Optional[str] = None) -> UserProfile:
-        # Check by id first
-        user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
-        if not user and anonymous_id:
-            user = db.query(UserProfile).filter(
-                (UserProfile.anonymous_id == anonymous_id) | (UserProfile.id == anonymous_id)
+        anon_id = anonymous_id or user_id
+        # 1. Check if user already exists
+        user = db.query(UserProfile).filter(
+            (UserProfile.id == user_id) | 
+            (UserProfile.anonymous_id == anon_id) |
+            (UserProfile.id == anon_id)
+        ).first()
+        if user:
+            return user
+            
+        # 2. Attempt atomic insert with IntegrityError guard
+        try:
+            user = UserProfile(
+                id=user_id,
+                anonymous_id=anon_id,
+                segment="Casual Explorer"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            return user
+        except IntegrityError:
+            db.rollback()
+            # 3. Re-query for existing row after race
+            existing = db.query(UserProfile).filter(
+                (UserProfile.id == user_id) | 
+                (UserProfile.anonymous_id == anon_id) |
+                (UserProfile.id == anon_id)
             ).first()
-        if not user:
-            anon = anonymous_id or f"anon_{uuid.uuid4().hex[:10]}"
-            # Verify if this anonymous_id already exists in db
-            existing_anon = db.query(UserProfile).filter(UserProfile.anonymous_id == anon).first()
-            if existing_anon:
-                return existing_anon
-            try:
-                user = UserProfile(
-                    id=user_id,
-                    anonymous_id=anon,
-                    segment="Casual Explorer"
-                )
-                db.add(user)
-                db.commit()
-                db.refresh(user)
-            except Exception:
-                db.rollback()
-                user = db.query(UserProfile).filter(
-                    (UserProfile.id == user_id) | (UserProfile.anonymous_id == anon)
-                ).first()
+            if existing:
+                return existing
+            return db.query(UserProfile).filter(UserProfile.anonymous_id == anon_id).first()
         return user
 
     @classmethod

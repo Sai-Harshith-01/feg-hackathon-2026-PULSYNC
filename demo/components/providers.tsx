@@ -12,7 +12,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const lastTrackedPath = useRef<string | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
 
+  const hasMounted = useRef(false)
+
   useEffect(() => {
+    if (hasMounted.current) return
+    hasMounted.current = true
+
     void recoverOrCreateSession()
       .then(() => {
         setSessionReady(true)

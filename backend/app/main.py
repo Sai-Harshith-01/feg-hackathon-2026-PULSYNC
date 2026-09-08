@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from backend.config import settings
 from backend.database import engine, get_db
@@ -153,19 +154,30 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
         existing.session_id = existing.id
         return existing
         
+    user = None
     if uid:
-        UserProfilingService.get_or_create_user(db, uid, anonymous_id=payload.anonymous_user_id)
+        user = UserProfilingService.get_or_create_user(db, uid, anonymous_id=payload.anonymous_user_id)
         
+    session_user_id = user.id if user else uid
     session = DBSession(
         id=sid,
-        user_id=uid,
+        user_id=session_user_id,
         started_at=datetime.datetime.utcnow(),
         is_synthetic=payload.is_synthetic,
         status="ACTIVE"
     )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
+    try:
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(DBSession).filter(DBSession.id == sid).first()
+        if existing:
+            existing.session_id = existing.id
+            return existing
+        raise
+
     session.session_id = session.id
     return session
 
