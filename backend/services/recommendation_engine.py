@@ -105,31 +105,42 @@ class RecommendationEngine:
         previous_recommendations: List[Recommendation],
         transaction_intent: str = "LOW",
         information_interest: str = "HIGH",
-        engagement_state: str = "VALUE_SEEKING"
+        engagement_state: str = "VALUE_SEEKING",
+        recommendation_mode: str = "VALUE_SEEKING",
+        compliance: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        
-        # 0. Respect Exit condition
-        if engagement_state == "RESPECT_EXIT" or (transaction_intent == "LOW" and information_interest == "LOW"):
+
+        # 0. RESPECT_EXIT: return nothing — honour user's choice
+        if recommendation_mode == "RESPECT_EXIT" or engagement_state == "RESPECT_EXIT":
             return []
 
         current_page = events[-1].page.lower() if events and events[-1].page else "match_detail"
         recent_event_types = [e.event_type.lower() for e in events[-5:] if e.event_type]
-        
+
         # History tracking for penalties
         viewed_content = {r.content_id for r in previous_recommendations if r.clicked}
         dismissed_content = {r.content_id for r in previous_recommendations if r.dismissed}
         recently_shown = {r.content_id for r in previous_recommendations[-3:]}
-        
+
         user_segment = user.segment if user else "Casual Explorer"
-        
-        # Allowed candidate types for VALUE_SEEKING mode
+
+        # Allowed candidate types based on recommendation_mode
         allowed_types = None
-        if engagement_state == "VALUE_SEEKING" or (transaction_intent == "LOW" and information_interest == "HIGH"):
+        if recommendation_mode in ("VALUE_SEEKING", "LOW_PRESSURE") or (transaction_intent == "LOW" and information_interest in ("HIGH", "MEDIUM")):
+            # Filter to strictly informational content only
             allowed_types = {
-                "Team Comparison", "Head-to-Head", "Team Form", 
+                "Team Comparison", "Head-to-Head", "Team Form",
                 "Key Statistics", "Match Insights", "Save for Later"
             }
-        
+        elif recommendation_mode == "NORMAL" and transaction_intent in ("HIGH", "MEDIUM"):
+            # High betting intent: provide informational context to help informed decision
+            # NEVER recommend stake increases, bet more, or loss recovery
+            allowed_types = {
+                "Key Statistics", "Team Form", "Head-to-Head",
+                "Team Comparison", "Match Insights", "Save for Later"
+            }
+
+
         scored_candidates = []
         
         for cand in cls.CANDIDATES:

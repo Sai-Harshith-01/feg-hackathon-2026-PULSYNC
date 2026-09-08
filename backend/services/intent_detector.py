@@ -2,7 +2,7 @@ from typing import List, Tuple
 from backend.models import Event
 
 class IntentDetector:
-    """Detects current user session intent based on recent chronological actions."""
+    """Detects current user session intent, transaction intent, information interest, and engagement state."""
     
     INTENTS = ["EXPLORE", "COMPARE", "UNDERSTAND", "REVIEW", "ACT"]
     
@@ -15,22 +15,22 @@ class IntentDetector:
         if not events:
             return "EXPLORE", 0.50, "New session started with exploratory posture."
             
-        recent = events[-6:] # Analyze last 6 interactions
+        recent = events[-8:] # Analyze last 8 interactions
         event_types = [e.event_type.lower() if e.event_type else "" for e in recent]
         pages = [e.page.lower() if e.page else "" for e in recent]
         actions = [e.action.lower() if e.action else "" for e in recent]
         
         all_text = " ".join(event_types + pages + actions)
         
-        # 1. ACT intent: user saving, clicking insights, interacting with content controls
-        if any(term in all_text for term in ["save", "content_click", "share", "select", "pin"]):
+        # 1. ACT intent: betslip interactions, placing bets, or saving match content
+        if any(term in all_text for term in ["betslip", "place_bet", "click_place_bet", "save", "content_click", "share", "select", "pin"]):
             return (
                 "ACT",
                 0.88,
-                "User is actively interacting with informational cards and saving match content."
+                "User is taking decisive action in the session (viewing betslip, placing bet, or saving content)."
             )
             
-        # 2. COMPARE intent: user viewing H2H, comparisons, switching between teams/matches
+        # 2. COMPARE intent: user viewing H2H, team comparison, switching between teams/matches
         if any(term in all_text for term in ["compare", "comparison", "h2h", "versus", "vs", "head_to_head"]):
             return (
                 "COMPARE",
@@ -55,7 +55,7 @@ class IntentDetector:
             )
             
         # 5. EXPLORE: default browsing sports and matches
-        match_views = sum(1 for et in event_types if "match" in et or "search" in et or "navigation" in et)
+        match_views = sum(1 for et in event_types if "match" in et or "search" in et or "navigation" in et or "sport" in et)
         if match_views >= 2:
             return (
                 "EXPLORE",
@@ -68,3 +68,83 @@ class IntentDetector:
             0.60,
             "General browsing behavior observed across sports event categories."
         )
+
+    @classmethod
+    def calculate_transaction_intent(cls, events: List[Event]) -> str:
+        """
+        Evaluates observed transaction / betting intent in the current session.
+        Returns: "HIGH", "MEDIUM", or "LOW"
+        """
+        if not events:
+            return "LOW"
+            
+        recent = events[-8:]
+        all_text = " ".join([
+            f"{e.event_type or ''} {e.page or ''} {e.action or ''}".lower()
+            for e in recent
+        ])
+        
+        # High transaction signals: betslip, place bet, selections, multiple market views
+        high_signals = ["betslip", "place_bet", "click_place_bet", "add_selection", "remove_selection", "odds_click"]
+        if any(sig in all_text for sig in high_signals):
+            return "HIGH"
+            
+        market_views = sum(1 for e in recent if any(m in f"{e.event_type or ''} {e.page or ''} {e.action or ''}".lower() for m in ["market", "view_market", "odds"]))
+        if market_views >= 2:
+            return "HIGH"
+        elif market_views == 1:
+            return "MEDIUM"
+            
+        return "LOW"
+
+    @classmethod
+    def calculate_information_interest(cls, events: List[Event], abandonment_prob: float = 0.0) -> str:
+        """
+        Evaluates observed informational interest in the current session.
+        Returns: "HIGH", "MEDIUM", or "LOW"
+        """
+        if not events:
+            return "HIGH"
+            
+        recent = events[-8:]
+        all_text = " ".join([
+            f"{e.event_type or ''} {e.page or ''} {e.action or ''}".lower()
+            for e in recent
+        ])
+        
+        # Check explicit exit signal
+        if any(term in all_text for term in ["explicit_exit", "exit", "dismiss_all"]):
+            return "LOW"
+            
+        if abandonment_prob > 0.85:
+            return "LOW"
+            
+        # High information signals: match view, team view, statistics, comparison, H2H, form, insights, save
+        info_signals = ["match", "team", "stat", "statistics", "compare", "comparison", "h2h", "form", "insights", "save"]
+        info_count = sum(1 for e in recent if any(sig in f"{e.event_type or ''} {e.page or ''} {e.action or ''}".lower() for sig in info_signals))
+        
+        if info_count >= 2:
+            return "HIGH"
+        elif info_count == 1:
+            return "MEDIUM"
+            
+        return "MEDIUM" if len(events) <= 3 else "LOW"
+
+    @classmethod
+    def evaluate_engagement_state(cls, transaction_intent: str, information_interest: str, explicit_exit: bool = False) -> Tuple[str, str]:
+        """
+        Calculates engagement_state and recommendation_mode based on decision matrix.
+        Returns: (engagement_state, recommendation_mode)
+        """
+        if explicit_exit:
+            return "RESPECT_EXIT", "RESPECT_EXIT"
+            
+        if transaction_intent == "LOW" and information_interest == "HIGH":
+            return "VALUE_SEEKING", "VALUE_SEEKING"
+        elif transaction_intent == "LOW" and information_interest == "MEDIUM":
+            return "LOW_PRESSURE", "LOW_PRESSURE"
+        elif transaction_intent == "LOW" and information_interest == "LOW":
+            return "RESPECT_EXIT", "RESPECT_EXIT"
+        else:
+            return "NORMAL", "NORMAL"
+

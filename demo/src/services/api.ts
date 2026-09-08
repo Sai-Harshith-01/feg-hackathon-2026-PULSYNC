@@ -77,10 +77,31 @@ export interface RecommendationItem {
 }
 
 export interface SessionIntel {
-  intent: { label: string; confidence: number; reason: string }
+  session_id?: string
+  user_id?: string
+  intent: string
+  intent_confidence: number
+  intent_reason?: string
+  // Machine 3 signals
+  transaction_intent: 'LOW' | 'MEDIUM' | 'HIGH'
+  information_interest: 'LOW' | 'MEDIUM' | 'HIGH'
+  engagement_state: 'NORMAL' | 'VALUE_SEEKING' | 'RESPECT_EXIT' | 'LOW_PRESSURE'
+  recommendation_mode: 'NORMAL' | 'VALUE_SEEKING' | 'RESPECT_EXIT' | 'LOW_PRESSURE'
+  engagement_message?: string
+  explicit_exit?: boolean
   friction_level: string
+  friction_score?: number
   abandonment_probability: number
-  session_quality_score: number
+  session_quality?: number
+  session_quality_score?: number
+  recommendations?: RecommendationItem[]
+  top_recommendation?: RecommendationItem | null
+  compliance?: {
+    betting_eligible: boolean
+    self_excluded: boolean
+    age_verified: boolean
+    kyc_verified: boolean
+  }
 }
 
 export async function fetchSports(): Promise<SportItem[]> {
@@ -164,6 +185,15 @@ export async function fetchRecommendations(sessionId: string): Promise<Recommend
     return res.data.recommendations || []
   } catch (e) {
     return []
+  }
+}
+
+export async function fetchSessionIntelligence(sessionId: string): Promise<SessionIntel | null> {
+  try {
+    const res = await api.get<SessionIntel>(`/api/sessions/${sessionId}/intelligence`)
+    return res.data
+  } catch (e) {
+    return null
   }
 }
 

@@ -177,17 +177,30 @@ class SessionIntelligenceResponse(BaseModel):
     intent: str
     intent_confidence: float
     intent_reason: str
+    # Machine 3: transaction intent, information interest, engagement
+    transaction_intent: Optional[str] = "LOW"
+    information_interest: Optional[str] = "HIGH"
+    engagement_state: Optional[str] = "NORMAL"
+    recommendation_mode: Optional[str] = "NORMAL"
+    engagement_message: Optional[str] = None
+    explicit_exit: Optional[bool] = False
+    # Behavioural scores
     abandonment_probability: float
     abandonment_risk_level: str
     abandonment_reason: str
     friction_score: float
     friction_level: str
     friction_reason: str
+    session_quality: Optional[float] = None
     session_quality_score: float
     session_quality_explanation: str
+    # Guidance & recommendations
     guidance: GuidanceResponse
     top_recommendation: Optional[Dict[str, Any]] = None
+    recommendations: Optional[List[Dict[str, Any]]] = []
     intelligence: Optional[Dict[str, Any]] = None
+    # Compliance (from Machine 2 — read-only here)
+    compliance: Optional[Dict[str, Any]] = None
 
 # ==================================================
 # Recommendation Schemas
