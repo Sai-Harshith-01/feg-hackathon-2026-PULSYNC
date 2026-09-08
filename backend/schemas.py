@@ -1,0 +1,242 @@
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+# ==================================================
+# Compliance Schemas
+# ==================================================
+class AgeVerificationRequest(BaseModel):
+    user_id: Optional[str] = None
+    age: Optional[int] = None
+    birth_date: Optional[str] = None
+    verification_method: str = "mock_eudi_simulated"
+
+class AgeVerificationResponse(BaseModel):
+    user_id: Optional[str] = None
+    is_verified: bool = True
+    verified: bool = True
+    minimum_age: int = 18
+    status: str = "VERIFIED_AGE_OVER_18"
+    provider: str = "Simulated Mock Age Verification (MVP)"
+    timestamp: datetime = Field(default_factory=utc_now)
+
+class SelfExclusionRequest(BaseModel):
+    user_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
+    national_registry_id: Optional[str] = None
+
+class SelfExclusionResponse(BaseModel):
+    user_id: Optional[str] = None
+    self_excluded: bool = False
+    eligible: bool = True
+    status: str = "ACTIVE_NOT_EXCLUDED"
+    provider: str = "Simulated Mock Exclusion Registry (MVP)"
+    timestamp: datetime = Field(default_factory=utc_now)
+
+# ==================================================
+# User Schemas
+# ==================================================
+class UserCreate(BaseModel):
+    id: Optional[str] = None
+    anonymous_id: Optional[str] = None
+    segment: Optional[str] = "Casual Explorer"
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    anonymous_id: Optional[str] = None
+    segment: str
+    age_verified: bool
+    self_excluded: bool
+    created_at: datetime
+    sessions_count: Optional[int] = 0
+    preferred_sport: Optional[str] = None
+    frequently_viewed_content: Optional[List[str]] = []
+
+# ==================================================
+# Session Schemas
+# ==================================================
+class SessionCreate(BaseModel):
+    id: Optional[str] = None
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
+    is_synthetic: bool = False
+
+class SessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+    intent: str
+    intent_confidence: float
+    abandonment_probability: float
+    friction_score: float
+    friction_level: str
+    session_quality_score: float
+    status: str
+    is_synthetic: bool
+
+# ==================================================
+# Event Schemas
+# ==================================================
+class EventCreate(BaseModel):
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    event_type: str # page_view, match_view, statistics_view, h2h_view, team_form_view, comparison, search, back, save, content_click, navigation, session_start, session_end
+    page: Optional[str] = None
+    action: Optional[str] = None
+    sport: Optional[str] = None
+    match_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+
+class EventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    session_id: str
+    user_id: Optional[str] = None
+    timestamp: datetime
+    event_type: str
+    page: Optional[str] = None
+    action: Optional[str] = None
+    sport: Optional[str] = None
+    match_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+
+# ==================================================
+# Intelligence & Contextual Guidance Schemas
+# ==================================================
+class GuidanceResponse(BaseModel):
+    should_intervene: bool
+    guidance_message: Optional[str] = None
+    recommended_action: Optional[str] = None
+    content_id: Optional[str] = None
+
+class SessionIntelligenceResponse(BaseModel):
+    session_id: str
+    user_id: Optional[str] = None
+    intent: str
+    intent_confidence: float
+    intent_reason: str
+    abandonment_probability: float
+    abandonment_risk_level: str
+    abandonment_reason: str
+    friction_score: float
+    friction_level: str
+    friction_reason: str
+    session_quality_score: float
+    session_quality_explanation: str
+    guidance: GuidanceResponse
+    top_recommendation: Optional[Dict[str, Any]] = None
+    intelligence: Optional[Dict[str, Any]] = None
+
+# ==================================================
+# Recommendation Schemas
+# ==================================================
+class RecommendationItem(BaseModel):
+    content_id: str
+    content_type: str
+    title: str
+    score: float
+    rank: int
+    reason: str
+    context: Optional[str] = None
+
+class RecommendationListResponse(BaseModel):
+    session_id: str
+    intent: str
+    friction_level: str
+    recommendations: List[RecommendationItem]
+
+class RecommendationFeedbackRequest(BaseModel):
+    recommendation_id: Optional[Any] = None
+    content_id: Optional[str] = None
+    feedback_type: Optional[str] = None
+    action: Optional[str] = None
+
+# ==================================================
+# Outcome Schemas
+# ==================================================
+class OutcomeCreate(BaseModel):
+    session_id: str
+    recommendation_id: Optional[int] = None
+    decision: str # VIEW_CONTENT, SAVE_CONTENT, DISMISS, CONTINUE_BROWSING, ABANDON
+    content_viewed: bool = False
+    session_continued: bool = True
+
+class OutcomeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    session_id: str
+    decision: str
+    content_viewed: bool
+    session_continued: bool
+    created_at: datetime
+
+# ==================================================
+# Match Schemas
+# ==================================================
+class MatchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    sport: str
+    team_home: str
+    team_away: str
+    start_time: datetime
+    status: str
+
+# ==================================================
+# Dashboard Schemas
+# ==================================================
+class DashboardMetricsResponse(BaseModel):
+    total_sessions: int
+    live_sessions: int
+    reconstructed_sessions: int
+    actions_per_session: float
+    sessions_per_user: float
+    time_to_first_action_sec: float
+    early_abandonment_rate: float
+    average_session_quality: float
+    recommendation_ctr: float
+    recommendation_continuation_rate: float
+
+class DashboardSegmentsResponse(BaseModel):
+    segments: List[Dict[str, Any]]
+
+class DashboardRecommendationsResponse(BaseModel):
+    performance: List[Dict[str, Any]]
+
+class DashboardQualityResponse(BaseModel):
+    quality_by_segment: List[Dict[str, Any]]
+    abandonment_by_segment: List[Dict[str, Any]]
+
+class DashboardImpactResponse(BaseModel):
+    status: str = "Prototype Impact Simulation"
+    methodology: str = "Behavioral proxy replay comparing high-friction sessions with vs without contextual guidance intervention"
+    metric_improvements: Dict[str, Any]
+
+# ==================================================
+# Demo Mode Schemas
+# ==================================================
+class DemoStartRequest(BaseModel):
+    user_id: Optional[str] = "demo_user_001"
+    sport: Optional[str] = "Football"
+    match_id: Optional[str] = "match_rma_bar"
+
+class DemoStartResponse(BaseModel):
+    session_id: str
+    user_id: str
+    events_triggered: List[Dict[str, Any]]
+    final_intelligence: SessionIntelligenceResponse
+    message: str = "Demo session successfully executed through full behavioral cycle."
