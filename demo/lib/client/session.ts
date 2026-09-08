@@ -40,17 +40,29 @@ function anonymousUserId(): string {
   return id
 }
 
+let inFlightSessionPromise: Promise<SessionState | null> | null = null
+
 export async function recoverOrCreateSession(): Promise<SessionState | null> {
   if (!isExternalApiConfigured()) return null
   const stored = readStoredSession()
   if (stored?.session_id) return stored
 
-  const created = await apiPost<SessionState>("/api/sessions", {
-    anonymous_user_id: anonymousUserId(),
-  })
-  if (!created.session_id) throw new Error("Session service returned no session_id")
-  window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(created))
-  return created
+  if (inFlightSessionPromise) return inFlightSessionPromise
+
+  inFlightSessionPromise = (async () => {
+    try {
+      const created = await apiPost<SessionState>("/api/sessions", {
+        anonymous_user_id: anonymousUserId(),
+      })
+      if (!created.session_id) throw new Error("Session service returned no session_id")
+      window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(created))
+      return created
+    } finally {
+      inFlightSessionPromise = null
+    }
+  })()
+
+  return inFlightSessionPromise
 }
 
 export async function verifyAccess(age: number): Promise<{ verified: boolean; minimum_age?: number }> {

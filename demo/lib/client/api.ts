@@ -6,7 +6,7 @@ const externalApiUrl =
   ""
 
 export function isExternalApiConfigured(): boolean {
-  return Boolean(externalApiUrl)
+  return true
 }
 
 function resolveUrl(url: string): string {

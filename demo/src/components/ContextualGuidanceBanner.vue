@@ -1,0 +1,158 @@
+<template>
+  <div>
+    <div v-if="recommendations.length > 0" class="rounded-lg border border-blue-500/30 bg-gradient-to-r from-blue-950/40 via-card to-slate-900/60 p-4 shadow-lg">
+      <div class="flex items-center justify-between border-b border-blue-500/20 pb-2.5">
+        <div class="flex items-center gap-2">
+          <Sparkles class="size-4 text-blue-400 animate-pulse" />
+          <span class="text-xs font-bold uppercase tracking-wider text-blue-400">PULSYNC AI Contextual Guidance</span>
+          <span class="rounded bg-blue-500/20 px-2 py-0.5 text-[10px] font-semibold text-blue-300">Non-Gambling Mode</span>
+        </div>
+        <span class="text-[11px] font-mono text-slate-400">Session ID: {{ sessionId.slice(0, 12) }}</span>
+      </div>
+
+      <div class="mt-3 grid gap-3 md:grid-cols-2">
+        <div 
+          v-for="rec in recommendations.slice(0, 2)" 
+          :key="rec.id"
+          class="flex flex-col justify-between rounded-md border border-border/80 bg-accent/40 p-3 transition-all hover:border-blue-500/40"
+        >
+          <div>
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-bold text-slate-100">{{ rec.title }}</h4>
+              <span class="text-[10px] font-mono text-amber-400 font-semibold">{{ rec.score }}% Relevance</span>
+            </div>
+            <p class="mt-1 text-xs text-slate-300 leading-relaxed">{{ rec.description }}</p>
+            <div class="mt-2 flex items-center gap-1.5 text-[11px] text-blue-400">
+              <Info class="size-3 shrink-0" />
+              <span>{{ rec.reason }}</span>
+            </div>
+          </div>
+
+          <button 
+            @click="clickGuidance(rec)"
+            class="mt-3 flex items-center justify-center gap-1.5 rounded bg-blue-600/30 border border-blue-500/50 px-3 py-2 text-xs font-bold text-blue-200 transition-all hover:bg-blue-600 hover:text-white active:scale-95 shadow"
+          >
+            <span>{{ rec.action_label || 'View Head-to-Head Stats' }}</span>
+            <ChevronRight class="size-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Head-to-Head & Tactical Insights Modal -->
+    <div v-if="activeModalRec" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div class="w-full max-w-lg rounded-xl border border-blue-500/40 bg-[#0d121d] p-5 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-border pb-3">
+          <div class="flex items-center gap-2">
+            <BarChart2 class="size-5 text-blue-400" />
+            <h3 class="text-sm font-bold text-slate-100">{{ activeModalRec.title }}</h3>
+          </div>
+          <button @click="closeModal" class="rounded p-1 text-slate-400 hover:bg-accent hover:text-white">
+            <X class="size-4" />
+          </button>
+        </div>
+
+        <!-- H2H Encounters & Form Stats -->
+        <div class="mt-4 flex flex-col gap-3">
+          <div class="rounded-lg border border-border bg-card p-3">
+            <div class="flex items-center justify-between text-xs font-bold text-slate-300 border-b border-border/60 pb-1.5">
+              <span>Fixture: Viking vs Dinamo Zagreb</span>
+              <span class="text-emerald-400 font-mono">LIVE 24'</span>
+            </div>
+
+            <!-- Recent H2H encounters -->
+            <div class="mt-2.5 flex flex-col gap-1.5 text-xs">
+              <span class="text-[11px] font-semibold text-slate-400">Head-to-Head Encounters (Last 5 Matches)</span>
+              <div class="flex items-center justify-between rounded bg-accent/50 px-2.5 py-1 text-slate-200">
+                <span>Aug 2026: Dinamo Zagreb 2 - 1 Viking</span>
+                <span class="font-bold text-blue-400">Dinamo Win</span>
+              </div>
+              <div class="flex items-center justify-between rounded bg-accent/50 px-2.5 py-1 text-slate-200">
+                <span>May 2026: Viking 1 - 1 Dinamo Zagreb</span>
+                <span class="font-bold text-amber-400">Draw</span>
+              </div>
+              <div class="flex items-center justify-between rounded bg-accent/50 px-2.5 py-1 text-slate-200">
+                <span>Feb 2026: Dinamo Zagreb 0 - 2 Viking</span>
+                <span class="font-bold text-emerald-400">Viking Win</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Team Form Analysis -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="rounded-lg border border-border bg-card p-3">
+              <span class="text-[11px] font-bold uppercase text-slate-400">Viking Form</span>
+              <div class="mt-1.5 flex items-center gap-1 font-mono text-xs font-bold">
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+                <span class="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">D</span>
+                <span class="rounded bg-red-500/20 px-1.5 py-0.5 text-red-400">L</span>
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+              </div>
+              <span class="mt-1 text-[10px] text-slate-400 block">Avg Goals Scored: 1.8 / match</span>
+            </div>
+
+            <div class="rounded-lg border border-border bg-card p-3">
+              <span class="text-[11px] font-bold uppercase text-slate-400">Dinamo Zagreb Form</span>
+              <div class="mt-1.5 flex items-center gap-1 font-mono text-xs font-bold">
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+                <span class="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">D</span>
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+                <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">W</span>
+              </div>
+              <span class="mt-1 text-[10px] text-slate-400 block">Avg Goals Scored: 2.2 / match</span>
+            </div>
+          </div>
+
+          <!-- Non-Gambling Insights Notice -->
+          <div class="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-300">
+            <div class="flex items-center gap-1.5 font-bold mb-1">
+              <CheckCircle2 class="size-4 text-blue-400" />
+              <span>Feedback Logged to PULSYNC Engine</span>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-relaxed">
+              Interaction recorded. Recommendation scoring model dynamically updated for Session {{ sessionId.slice(0, 12) }}.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+          <button @click="closeModal" class="rounded bg-blue-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-blue-500">
+            Close Analysis
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { Sparkles, Info, ChevronRight, BarChart2, X, CheckCircle2 } from 'lucide-vue-next'
+import { createSession, fetchRecommendations, trackSessionEvent, type RecommendationItem } from '@/services/api'
+
+const sessionId = ref('')
+const recommendations = ref<RecommendationItem[]>([])
+const activeModalRec = ref<RecommendationItem | null>(null)
+
+onMounted(async () => {
+  const anonId = localStorage.getItem('pulsync_anon_id') || crypto.randomUUID()
+  localStorage.setItem('pulsync_anon_id', anonId)
+
+  sessionId.value = await createSession(anonId)
+  await trackSessionEvent(sessionId.value, 'page_view', '/sport', 'browse')
+  recommendations.value = await fetchRecommendations(sessionId.value)
+})
+
+async function clickGuidance(rec: RecommendationItem) {
+  activeModalRec.value = rec
+  if (sessionId.value) {
+    await trackSessionEvent(sessionId.value, 'recommendation_click', '/sport', rec.title)
+  }
+}
+
+function closeModal() {
+  activeModalRec.value = null
+}
+</script>
