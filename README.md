@@ -24,3 +24,28 @@ docker compose up --build
 ```
 
 Open http://localhost:3000. Stop the container with `docker compose down`.
+
+## Repository structure
+
+```text
+.
+├── .github/
+│   └── workflows/
+├── demo/
+│   ├── app/              # Next.js pages and mock API routes
+│   ├── components/       # UI components
+│   ├── lib/              # Client, domain, and server helpers
+│   ├── public/           # Static assets
+│   ├── Dockerfile
+│   ├── package.json
+│   └── pnpm-lock.yaml
+├── docs/                 # Project documentation
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example
+└── README.md
+```
+
+The `demo/` application is currently self-contained and uses mock data and API
+routes. Backend and AI services can be integrated independently in their
+respective workstreams.
