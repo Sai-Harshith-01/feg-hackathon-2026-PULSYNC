@@ -682,12 +682,13 @@ def list_events_feed(
         elif sport_name == "Baseball":
             comp_name = "MLB"
 
+        start_offset = (idx % 8 + 1) if (day and day.lower() == "today") else ((idx % 8 + 24) if (day and day.lower() == "tomorrow") else (idx % 12 + 1))
         events_data.append({
             "id": f"match_{idx}_{slug}",
             "match_id": match_id,
             "home": home,
             "away": away,
-            "startsAt": (now + datetime.timedelta(hours=(idx % 12 + 1))).isoformat() + "Z",
+            "startsAt": (now + datetime.timedelta(hours=start_offset)).isoformat() + "Z",
             "status": event_status,
             "homeScore": (h_val % 3) if is_live else 0,
             "awayScore": ((h_val >> 3) % 3) if is_live else 0,
