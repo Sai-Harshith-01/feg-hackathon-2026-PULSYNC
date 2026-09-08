@@ -76,11 +76,18 @@
             <button
               v-for="sel in ev.primarySelections"
               :key="sel.id"
-              @click="$emit('select-odd', { event: ev, selection: sel })"
-              class="flex h-9 w-20 flex-col items-center justify-center rounded border border-border bg-accent/60 px-2 py-1 transition-all hover:border-blue-500/50 hover:bg-blue-600/20 active:scale-95"
+              @click="toggleOdd(ev, sel)"
+              class="flex h-9 w-20 flex-col items-center justify-center rounded border px-2 py-1 transition-all active:scale-95 shadow-sm"
+              :class="selectedIds.has(sel.id) 
+                ? 'border-blue-400 bg-blue-600 text-white shadow-blue-500/20' 
+                : 'border-border bg-accent/60 text-slate-400 hover:border-blue-500/50 hover:bg-blue-600/20'"
             >
-              <span class="text-[10px] truncate max-w-full text-slate-400">{{ sel.name }}</span>
-              <span class="font-mono text-xs font-bold text-blue-400">{{ sel.odds.toFixed(2) }}</span>
+              <span class="text-[10px] truncate max-w-full" :class="selectedIds.has(sel.id) ? 'text-blue-100 font-semibold' : 'text-slate-400'">
+                {{ sel.name }}
+              </span>
+              <span class="font-mono text-xs font-bold" :class="selectedIds.has(sel.id) ? 'text-white' : 'text-blue-400'">
+                {{ sel.odds.toFixed(2) }}
+              </span>
             </button>
           </div>
         </div>
@@ -92,14 +99,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { CalendarX } from 'lucide-vue-next'
-import { fetchEvents, type EventItem } from '@/services/api'
+import { fetchEvents, type EventItem, type SelectionItem } from '@/services/api'
 
 const props = defineProps<{
   sport?: string
   liveOnly?: boolean
 }>()
 
-defineEmits(['select-odd'])
+const emit = defineEmits(['select-odd'])
 
 const days = [
   { key: 'all', label: 'All' },
@@ -110,6 +117,7 @@ const days = [
 const activeDay = ref('all')
 const events = ref<EventItem[]>([])
 const loading = ref(true)
+const selectedIds = ref<Set<string>>(new Set())
 
 const totalEvents = computed(() => events.value.length)
 
@@ -122,6 +130,19 @@ const groupedEvents = computed(() => {
   }
   return groups
 })
+
+function toggleOdd(ev: EventItem, sel: SelectionItem) {
+  if (selectedIds.value.has(sel.id)) {
+    selectedIds.value.delete(sel.id)
+  } else {
+    // Clear other selections for the same event
+    for (const s of ev.primarySelections) {
+      selectedIds.value.delete(s.id)
+    }
+    selectedIds.value.add(sel.id)
+  }
+  emit('select-odd', { event: ev, selection: sel })
+}
 
 async function loadEvents() {
   loading.value = true
