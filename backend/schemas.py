@@ -6,13 +6,14 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 # ==================================================
-# Compliance Schemas
+# Compliance Schemas (Machine 2)
 # ==================================================
 class AgeVerificationRequest(BaseModel):
     user_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
     age: Optional[int] = None
     birth_date: Optional[str] = None
-    verification_method: str = "mock_eudi_simulated"
+    verification_method: str = "DEMO_ATTRIBUTE"
 
 class AgeVerificationResponse(BaseModel):
     user_id: Optional[str] = None
@@ -26,15 +27,57 @@ class AgeVerificationResponse(BaseModel):
 class SelfExclusionRequest(BaseModel):
     user_id: Optional[str] = None
     anonymous_user_id: Optional[str] = None
-    national_registry_id: Optional[str] = None
+    demo_profile_id: Optional[str] = None
 
 class SelfExclusionResponse(BaseModel):
     user_id: Optional[str] = None
+    checked: bool = True
+    excluded: bool = False
     self_excluded: bool = False
     eligible: bool = True
+    source: str = "DEMO_REGISTER"
     status: str = "ACTIVE_NOT_EXCLUDED"
-    provider: str = "Simulated Mock Exclusion Registry (MVP)"
     timestamp: datetime = Field(default_factory=utc_now)
+
+class KYCDemoRequest(BaseModel):
+    user_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
+    document_type: str = "National ID" # National ID, Passport, Driving Licence
+
+class KYCDemoResponse(BaseModel):
+    user_id: Optional[str] = None
+    kyc_verified: bool = True
+    document_type: str = "National ID"
+    status: str = "VERIFIED"
+    demo: bool = True
+    notice: str = "Demo verification — no real identity data processed."
+    timestamp: datetime = Field(default_factory=utc_now)
+
+class BettingEligibilityRequest(BaseModel):
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
+
+class BettingEligibilityResponse(BaseModel):
+    user_id: Optional[str] = None
+    eligible: bool = True
+    age_verified: bool = True
+    kyc_verified: bool = True
+    self_excluded: bool = False
+    reason: str = "ELIGIBLE"
+    status: str = "ELIGIBLE" # PENDING_VERIFICATION, AGE_RESTRICTED, KYC_REQUIRED, SELF_EXCLUDED, ELIGIBLE, VERIFICATION_FAILED
+    demo: bool = True
+    timestamp: datetime = Field(default_factory=utc_now)
+
+class ComplianceStatusResponse(BaseModel):
+    user_id: str
+    anonymous_id: Optional[str] = None
+    betting_eligible: bool = True
+    age_verified: bool = True
+    kyc_verified: bool = True
+    self_excluded: bool = False
+    status: str = "ELIGIBLE"
+    verification_method: str = "DEMO_ATTRIBUTE"
 
 # ==================================================
 # User Schemas
@@ -42,16 +85,23 @@ class SelfExclusionResponse(BaseModel):
 class UserCreate(BaseModel):
     id: Optional[str] = None
     anonymous_id: Optional[str] = None
+    display_name: Optional[str] = "Sports Enthusiast"
+    email: Optional[str] = "fan@pulsync.ai"
     segment: Optional[str] = "Casual Explorer"
+    age: Optional[int] = 21
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: str
     anonymous_id: Optional[str] = None
+    display_name: Optional[str] = "Sports Enthusiast"
+    email: Optional[str] = "fan@pulsync.ai"
     segment: str
     age_verified: bool
+    kyc_verified: bool = False
     self_excluded: bool
+    eligibility_status: str = "PENDING_VERIFICATION"
     created_at: datetime
     sessions_count: Optional[int] = 0
     preferred_sport: Optional[str] = None

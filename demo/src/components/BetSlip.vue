@@ -67,20 +67,28 @@
         </div>
 
         <button 
-          @click="submitSlip" 
+          @click="handlePlaceBet" 
           class="mt-2 w-full rounded bg-blue-600 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-500 active:scale-[0.99]"
         >
           Confirm Demo Selection
         </button>
       </div>
     </div>
+
+    <!-- Compliance Gate Modal -->
+    <ComplianceGateModal 
+      :show="showComplianceGate" 
+      @close="showComplianceGate = false" 
+      @eligibility-granted="onEligibilityGranted" 
+    />
   </aside>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Ticket, Receipt, X } from 'lucide-vue-next'
-import type { EventItem, SelectionItem } from '@/services/api'
+import { checkBettingEligibilityApi, placeBetApi, type EventItem, type SelectionItem } from '@/services/api'
+import ComplianceGateModal from './ComplianceGateModal.vue'
 
 const props = defineProps<{
   selections: { event: EventItem; selection: SelectionItem }[]
@@ -89,6 +97,7 @@ const props = defineProps<{
 const emit = defineEmits(['remove-selection', 'clear-slip'])
 
 const stake = ref(10)
+const showComplianceGate = ref(false)
 
 const totalOdds = computed(() => {
   if (props.selections.length === 0) return 0
@@ -99,8 +108,30 @@ const potentialPayout = computed(() => {
   return stake.value * totalOdds.value
 })
 
-function submitSlip() {
-  alert(`Demo Selection submitted! Potential return: €${potentialPayout.value.toFixed(2)}`)
-  emit('clear-slip')
+async function handlePlaceBet() {
+  const userId = 'usr_demo'
+  const eligibility = await checkBettingEligibilityApi(userId)
+  
+  if (!eligibility.eligible) {
+    showComplianceGate.value = true
+    return
+  }
+
+  await executeBetPlacement(userId)
+}
+
+async function onEligibilityGranted() {
+  await executeBetPlacement('usr_demo')
+}
+
+async function executeBetPlacement(userId: string) {
+  try {
+    const result = await placeBetApi(userId, props.selections, stake.value)
+    alert(`Demo Selection Placed! Bet ID: ${result.betId}. Potential return: €${potentialPayout.value.toFixed(2)}`)
+    emit('clear-slip')
+  } catch (err: any) {
+    alert(`Betting Blocked by Gate: ${err.reason || err.message || 'Ineligible user account.'}`)
+    showComplianceGate.value = true
+  }
 }
 </script>

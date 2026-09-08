@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +18,9 @@ from backend.models import (
 from backend.schemas import (
     AgeVerificationRequest, AgeVerificationResponse,
     SelfExclusionRequest, SelfExclusionResponse,
+    KYCDemoRequest, KYCDemoResponse,
+    BettingEligibilityRequest, BettingEligibilityResponse,
+    ComplianceStatusResponse,
     UserCreate, UserResponse,
     SessionCreate, SessionResponse,
     EventCreate, SessionIntelligenceResponse,
@@ -78,40 +81,222 @@ def health_check(db: Session = Depends(get_db)):
         )
 
 # ==================================================
-# Compliance MVP (Mock Integrations)
+# Compliance MVP (Machine 2 Implementation)
 # ==================================================
 @app.post("/api/compliance/age-verification", response_model=AgeVerificationResponse, tags=["Compliance"])
 def verify_age(payload: AgeVerificationRequest, db: Session = Depends(get_db)):
-    """Simulated mock age verification for MVP compliance demonstration."""
-    uid = payload.user_id
-    if uid:
-        user = db.query(UserProfile).filter(UserProfile.id == uid).first()
-        if user:
-            user.age_verified = True
-            db.commit()
+    """Conceptual 18+ age verification endpoint."""
+    uid = payload.user_id or payload.anonymous_user_id or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    if not user:
+        user = UserProfile(id=uid, anonymous_id=uid, segment="Casual Explorer")
+        db.add(user)
+        
+    is_underage = (payload.age is not None and payload.age < 18)
+    if payload.birth_date:
+        try:
+            dob = datetime.datetime.strptime(payload.birth_date, "%Y-%m-%d")
+            today = datetime.datetime.utcnow()
+            age_calculated = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            if age_calculated < 18:
+                is_underage = True
+        except ValueError:
+            pass
+
+    if is_underage:
+        user.age_verified = False
+        user.eligibility_status = "AGE_RESTRICTED"
+        db.commit()
+        return AgeVerificationResponse(
+            user_id=user.id,
+            is_verified=False,
+            verified=False,
+            minimum_age=18,
+            status="AGE_RESTRICTED",
+            provider="Simulated 18+ Attribute Verification"
+        )
+        
+    user.age_verified = True
+    user.age_verified_at = datetime.datetime.utcnow()
+    user.verification_method = payload.verification_method or "DEMO_ATTRIBUTE"
+    if user.kyc_verified and not user.self_excluded:
+        user.eligibility_status = "ELIGIBLE"
+    elif not user.kyc_verified:
+        user.eligibility_status = "KYC_REQUIRED"
+    db.commit()
+    
     return AgeVerificationResponse(
-        user_id=uid,
+        user_id=user.id,
         is_verified=True,
         verified=True,
         minimum_age=18,
-        status="VERIFIED_AGE_OVER_18"
+        status="VERIFIED_AGE_OVER_18",
+        provider="Simulated 18+ Attribute Verification"
+    )
+
+@app.post("/api/compliance/kyc-demo", response_model=KYCDemoResponse, tags=["Compliance"])
+def submit_kyc_demo(payload: KYCDemoRequest, db: Session = Depends(get_db)):
+    """Conceptual synthetic KYC verification step using dummy document types."""
+    uid = payload.user_id or payload.anonymous_user_id or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    if not user:
+        user = UserProfile(id=uid, anonymous_id=uid, age_verified=True)
+        db.add(user)
+        
+    user.kyc_verified = True
+    user.kyc_document_type = payload.document_type or "National ID"
+    if user.age_verified and not user.self_excluded:
+        user.eligibility_status = "ELIGIBLE"
+    db.commit()
+    
+    return KYCDemoResponse(
+        user_id=user.id,
+        kyc_verified=True,
+        document_type=user.kyc_document_type,
+        status="VERIFIED",
+        demo=True,
+        notice="Demo verification — no real identity data processed."
     )
 
 @app.post("/api/compliance/self-exclusion-check", response_model=SelfExclusionResponse, tags=["Compliance"])
 def check_self_exclusion(payload: SelfExclusionRequest, db: Session = Depends(get_db)):
-    """Simulated mock self-exclusion registry check for MVP compliance."""
-    uid = payload.user_id or payload.anonymous_user_id
-    is_excluded = False
-    if uid:
-        user = db.query(UserProfile).filter(
-            (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
-        ).first()
-        is_excluded = user.self_excluded if user else False
+    """Deterministic mock register check for excluded players."""
+    uid = payload.user_id or payload.anonymous_user_id or payload.demo_profile_id or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    is_excluded = user.self_excluded if user else False
+    status_str = "EXCLUDED" if is_excluded else "ACTIVE_NOT_EXCLUDED"
+    
     return SelfExclusionResponse(
         user_id=uid,
+        checked=True,
+        excluded=is_excluded,
         self_excluded=is_excluded,
         eligible=not is_excluded,
-        status="ACTIVE_NOT_EXCLUDED" if not is_excluded else "EXCLUDED"
+        source="DEMO_REGISTER",
+        status=status_str
+    )
+
+@app.post("/api/compliance/betting-eligibility", response_model=BettingEligibilityResponse, tags=["Compliance"])
+def evaluate_betting_eligibility(payload: BettingEligibilityRequest, db: Session = Depends(get_db)):
+    """
+    Core Machine 2 Gate: Returns single eligibility decision for betting access.
+    Checks age_verified == True AND kyc_verified == True AND self_excluded == False.
+    """
+    uid = payload.user_id or payload.anonymous_user_id
+    if not uid and payload.session_id:
+        sess = db.query(DBSession).filter(DBSession.id == payload.session_id).first()
+        if sess:
+            uid = sess.user_id
+            
+    uid = uid or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    if not user:
+        return BettingEligibilityResponse(
+            user_id=uid,
+            eligible=False,
+            age_verified=False,
+            kyc_verified=False,
+            self_excluded=False,
+            reason="PENDING_VERIFICATION",
+            status="PENDING_VERIFICATION",
+            demo=True
+        )
+        
+    if user.self_excluded:
+        return BettingEligibilityResponse(
+            user_id=user.id,
+            eligible=False,
+            age_verified=user.age_verified,
+            kyc_verified=user.kyc_verified,
+            self_excluded=True,
+            reason="Betting access is unavailable for this account due to self-exclusion.",
+            status="SELF_EXCLUDED",
+            demo=True
+        )
+
+    if not user.age_verified:
+        return BettingEligibilityResponse(
+            user_id=user.id,
+            eligible=False,
+            age_verified=False,
+            kyc_verified=user.kyc_verified,
+            self_excluded=False,
+            reason="Betting is available only after 18+ age verification.",
+            status="AGE_RESTRICTED",
+            demo=True
+        )
+
+    if not user.kyc_verified:
+        return BettingEligibilityResponse(
+            user_id=user.id,
+            eligible=False,
+            age_verified=True,
+            kyc_verified=False,
+            self_excluded=False,
+            reason="Identity verification (KYC demo) is required before placing bets.",
+            status="KYC_REQUIRED",
+            demo=True
+        )
+
+    user.eligibility_status = "ELIGIBLE"
+    db.commit()
+
+    return BettingEligibilityResponse(
+        user_id=user.id,
+        eligible=True,
+        age_verified=True,
+        kyc_verified=True,
+        self_excluded=False,
+        reason="ELIGIBLE",
+        status="ELIGIBLE",
+        demo=True
+    )
+
+@app.get("/api/compliance/status/{user_id}", response_model=ComplianceStatusResponse, tags=["Compliance"])
+def get_compliance_status(user_id: str, db: Session = Depends(get_db)):
+    """Exposes compliance status for Machine 3 & UI consumption."""
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == user_id) | (UserProfile.anonymous_id == user_id)
+    ).first()
+    
+    if not user:
+        return ComplianceStatusResponse(
+            user_id=user_id,
+            betting_eligible=False,
+            age_verified=False,
+            kyc_verified=False,
+            self_excluded=False,
+            status="PENDING_VERIFICATION"
+        )
+        
+    is_eligible = user.age_verified and user.kyc_verified and not user.self_excluded
+    status_str = "ELIGIBLE" if is_eligible else (
+        "SELF_EXCLUDED" if user.self_excluded else (
+            "AGE_RESTRICTED" if not user.age_verified else "KYC_REQUIRED"
+        )
+    )
+    
+    return ComplianceStatusResponse(
+        user_id=user.id,
+        anonymous_id=user.anonymous_id,
+        betting_eligible=is_eligible,
+        age_verified=user.age_verified,
+        kyc_verified=user.kyc_verified,
+        self_excluded=user.self_excluded,
+        status=status_str,
+        verification_method=user.verification_method or "DEMO_ATTRIBUTE"
     )
 
 # ==================================================
@@ -784,8 +969,43 @@ def list_bets(filter: Optional[str] = "open"):
 
 
 @app.post("/api/bets", tags=["Bets"])
-def place_bet():
-    return {"ok": True, "betId": f"bet_{uuid.uuid4().hex[:8]}"}
+def place_bet(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(get_db)):
+    """
+    Enforces Machine 2 Gate on Bet Placement.
+    Backend evaluates age_verified, kyc_verified, self_excluded.
+    Rejects ineligible users with HTTP 403.
+    """
+    uid = (payload.get("user_id") or payload.get("anonymous_user_id")) if payload else "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    is_eligible = (user is not None) and user.age_verified and user.kyc_verified and not user.self_excluded
+    
+    if not is_eligible:
+        status_str = "SELF_EXCLUDED" if (user and user.self_excluded) else (
+            "AGE_RESTRICTED" if (user and not user.age_verified) else "KYC_REQUIRED"
+        )
+        reason_str = "Betting access is unavailable due to self-exclusion." if (user and user.self_excluded) else (
+            "18+ Age verification required before placing bets." if (user and not user.age_verified) else "Identity verification (KYC demo) required."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "eligible": False,
+                "status": status_str,
+                "reason": reason_str,
+                "message": f"Betting blocked by PULSYNC Compliance Gate: {reason_str}"
+            }
+        )
+
+    return {
+        "ok": True,
+        "eligible": True,
+        "betId": f"bet_{uuid.uuid4().hex[:8]}",
+        "status": "ACCEPTED",
+        "demo": True
+    }
 
 
 @app.get("/api/casino", tags=["Casino"])

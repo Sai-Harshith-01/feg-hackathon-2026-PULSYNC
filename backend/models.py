@@ -12,9 +12,16 @@ class UserProfile(Base):
     
     id = Column(String, primary_key=True, index=True)
     anonymous_id = Column(String, unique=True, index=True, nullable=True)
+    display_name = Column(String, nullable=True, default="Sports Enthusiast")
+    email = Column(String, nullable=True, default="fan@pulsync.ai")
     segment = Column(String, default="Casual Explorer") # Football Explorer, Multi-Sport Explorer, etc.
     age_verified = Column(Boolean, default=False)
+    kyc_verified = Column(Boolean, default=False)
+    kyc_document_type = Column(String, nullable=True) # National ID, Passport, Driving Licence
     self_excluded = Column(Boolean, default=False)
+    age_verified_at = Column(DateTime, nullable=True)
+    verification_method = Column(String, default="DEMO_ATTRIBUTE")
+    eligibility_status = Column(String, default="PENDING_VERIFICATION") # PENDING_VERIFICATION, AGE_RESTRICTED, KYC_REQUIRED, SELF_EXCLUDED, ELIGIBLE, VERIFICATION_FAILED
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     # Relationships

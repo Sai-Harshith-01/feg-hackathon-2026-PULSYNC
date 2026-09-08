@@ -166,3 +166,92 @@ export async function fetchRecommendations(sessionId: string): Promise<Recommend
     return []
   }
 }
+
+export interface BettingEligibilityResult {
+  user_id?: string
+  eligible: boolean
+  age_verified: boolean
+  kyc_verified: boolean
+  self_excluded: boolean
+  reason: string
+  status: string
+  demo: boolean
+}
+
+export async function verifyAgeApi(userId: string, age: number, birthDate?: string) {
+  try {
+    const res = await api.post('/api/compliance/age-verification', {
+      user_id: userId,
+      anonymous_user_id: userId,
+      age,
+      birth_date: birthDate
+    })
+    return res.data
+  } catch (e) {
+    return { verified: false, status: 'AGE_RESTRICTED' }
+  }
+}
+
+export async function submitKycDemoApi(userId: string, documentType = 'National ID') {
+  try {
+    const res = await api.post('/api/compliance/kyc-demo', {
+      user_id: userId,
+      anonymous_user_id: userId,
+      document_type: documentType
+    })
+    return res.data
+  } catch (e) {
+    return { kyc_verified: false, status: 'KYC_FAILED' }
+  }
+}
+
+export async function checkSelfExclusionApi(userId: string) {
+  try {
+    const res = await api.post('/api/compliance/self-exclusion-check', {
+      user_id: userId,
+      anonymous_user_id: userId
+    })
+    return res.data
+  } catch (e) {
+    return { excluded: false, eligible: true }
+  }
+}
+
+export async function checkBettingEligibilityApi(userId: string, sessionId?: string): Promise<BettingEligibilityResult> {
+  try {
+    const res = await api.post<BettingEligibilityResult>('/api/compliance/betting-eligibility', {
+      user_id: userId,
+      anonymous_user_id: userId,
+      session_id: sessionId
+    })
+    return res.data
+  } catch (e) {
+    return {
+      eligible: false,
+      age_verified: false,
+      kyc_verified: false,
+      self_excluded: false,
+      reason: 'PENDING_VERIFICATION',
+      status: 'PENDING_VERIFICATION',
+      demo: true
+    }
+  }
+}
+
+export async function placeBetApi(userId: string, selections: any[], stake: number) {
+  try {
+    const res = await api.post('/api/bets', {
+      user_id: userId,
+      anonymous_user_id: userId,
+      selections,
+      stake
+    })
+    return res.data
+  } catch (e: any) {
+    if (e.response && e.response.data && e.response.data.detail) {
+      throw e.response.data.detail
+    }
+    throw { eligible: false, status: 'BETTING_BLOCKED', reason: 'Betting placement failed.' }
+  }
+}
+
