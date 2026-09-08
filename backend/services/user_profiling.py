@@ -1,5 +1,5 @@
+import uuid
 from typing import Dict, Any, Optional
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from backend.models import UserProfile, Session as DBSession, Event
 
@@ -38,9 +38,8 @@ class UserProfilingService:
             db.commit()
             db.refresh(user)
             return user
-        except IntegrityError:
+        except Exception:
             db.rollback()
-            # 3. Re-query for existing row after race
             existing = db.query(UserProfile).filter(
                 (UserProfile.id == user_id) | 
                 (UserProfile.anonymous_id == anon_id) |
@@ -48,7 +47,17 @@ class UserProfilingService:
             ).first()
             if existing:
                 return existing
-            return db.query(UserProfile).filter(UserProfile.anonymous_id == anon_id).first()
+            
+            fresh_anon = f"anon_{uuid.uuid4().hex[:10]}"
+            user = UserProfile(
+                id=user_id,
+                anonymous_id=fresh_anon,
+                segment="Casual Explorer"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            return user
         return user
 
     @classmethod

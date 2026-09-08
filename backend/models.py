@@ -11,7 +11,7 @@ class UserProfile(Base):
     __tablename__ = "users"
     
     id = Column(String, primary_key=True, index=True)
-    anonymous_id = Column(String, unique=True, index=True, nullable=True)
+    anonymous_id = Column(String, index=True, nullable=True)
     segment = Column(String, default="Casual Explorer") # Football Explorer, Multi-Sport Explorer, etc.
     age_verified = Column(Boolean, default=False)
     self_excluded = Column(Boolean, default=False)
