@@ -136,7 +136,33 @@ class SessionPrediction(Base):
     
     session = relationship("Session", back_populates="predictions")
 
+
+class PlayerProfile(Base):
+    __tablename__ = "player_profiles"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    anonymous_user_id = Column(String, unique=True, index=True)
+    preferred_sport = Column(String, default="Football")
+    activity_level = Column(String, default="MEDIUM") # HIGH, MEDIUM, LOW
+    total_activity = Column(Integer, default=0)
+    sport_distribution_json = Column(Text, default="{}")
+    preferred_product = Column(String, default="Sportsbook")
+    historical_activity_score = Column(Float, default=50.0)
+    profile_source = Column(String, default="FEG historical behavioral profile")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    def get_sport_distribution(self):
+        try:
+            return json.loads(self.sport_distribution_json) if self.sport_distribution_json else {}
+        except Exception:
+            return {}
+
+    def set_sport_distribution(self, value):
+        self.sport_distribution_json = json.dumps(value) if value is not None else "{}"
+
 # Indexes
 Index("idx_events_session_time", Event.session_id, Event.timestamp)
 Index("idx_recommendations_session_rank", Recommendation.session_id, Recommendation.rank)
 Index("idx_outcomes_session_created", Outcome.session_id, Outcome.created_at)
+Index("idx_player_profiles_anon_id", PlayerProfile.anonymous_user_id)
+Index("idx_events_sport_match", Event.sport, Event.match_id)

@@ -83,7 +83,21 @@ class SessionIntelligenceService:
         )
         session.session_quality_score = quality_score
         
-        # 8. Recommendation Generation & Ranking
+        # 8. Transaction Intent, Information Interest & Engagement State
+        transaction_intent = "HIGH" if intent == "ACT" else "LOW"
+        is_exiting = any(e.event_type and "dismiss" in e.event_type.lower() for e in all_events) or abandonment_prob > 0.85
+        information_interest = "LOW" if is_exiting else "HIGH"
+
+        if transaction_intent == "LOW" and information_interest == "LOW":
+            engagement_state = "RESPECT_EXIT"
+        elif transaction_intent == "LOW" and information_interest == "HIGH":
+            engagement_state = "VALUE_SEEKING"
+        else:
+            engagement_state = "INFORMATIONAL"
+
+        hist_profile = UserProfilingService.get_historical_player_profile(db, session.user_id) if session.user_id else None
+
+        # 9. Recommendation Generation & Ranking
         previous_recs = db.query(Recommendation).filter(Recommendation.session_id == session_id).all()
         recommendations = RecommendationEngine.generate_recommendations(
             session=session,
@@ -92,14 +106,16 @@ class SessionIntelligenceService:
             current_intent=intent,
             friction_level=friction_level,
             abandonment_probability=abandonment_prob,
-            previous_recommendations=previous_recs
+            previous_recommendations=previous_recs,
+            transaction_intent=transaction_intent,
+            information_interest=information_interest,
+            engagement_state=engagement_state
         )
         
         top_rec = recommendations[0] if recommendations else None
         
         # Persist top recommendations into DB if new
         if top_rec:
-            # Check if this exact top recommendation is already recorded for this session recently
             existing = db.query(Recommendation).filter(
                 Recommendation.session_id == session_id,
                 Recommendation.content_id == top_rec["content_id"]
@@ -117,7 +133,7 @@ class SessionIntelligenceService:
                 )
                 db.add(db_rec)
                 
-        # 9. Contextual Guidance Decision
+        # 10. Contextual Guidance Decision
         guidance = ContextualGuidanceService.evaluate_intervention(
             intent=intent,
             friction_level=friction_level,
@@ -125,7 +141,7 @@ class SessionIntelligenceService:
             top_recommendation=top_rec
         )
         
-        # 10. Persist Session Prediction Snapshot
+        # 11. Persist Session Prediction Snapshot
         pred = SessionPrediction(
             session_id=session_id,
             intent=intent,
@@ -146,6 +162,9 @@ class SessionIntelligenceService:
             "intent": intent,
             "intent_confidence": intent_conf,
             "intent_reason": intent_reason,
+            "transaction_intent": transaction_intent,
+            "information_interest": information_interest,
+            "engagement_state": engagement_state,
             "abandonment_probability": abandonment_prob,
             "abandonment_risk_level": risk_level,
             "abandonment_reason": abandonment_reason,
@@ -156,7 +175,8 @@ class SessionIntelligenceService:
             "session_quality_explanation": quality_reason,
             "guidance": guidance,
             "top_recommendation": top_rec,
-            "recommendations": recommendations[:5]
+            "recommendations": recommendations[:5],
+            "historical_profile": hist_profile
         }
 
     @classmethod
@@ -178,6 +198,19 @@ class SessionIntelligenceService:
             all_events, friction_score, abandonment_prob
         )
         
+        transaction_intent = "HIGH" if intent == "ACT" else "LOW"
+        is_exiting = any(e.event_type and "dismiss" in e.event_type.lower() for e in all_events) or abandonment_prob > 0.85
+        information_interest = "LOW" if is_exiting else "HIGH"
+
+        if transaction_intent == "LOW" and information_interest == "LOW":
+            engagement_state = "RESPECT_EXIT"
+        elif transaction_intent == "LOW" and information_interest == "HIGH":
+            engagement_state = "VALUE_SEEKING"
+        else:
+            engagement_state = "INFORMATIONAL"
+
+        hist_profile = UserProfilingService.get_historical_player_profile(db, session.user_id) if session.user_id else None
+
         previous_recs = db.query(Recommendation).filter(Recommendation.session_id == session_id).all()
         recommendations = RecommendationEngine.generate_recommendations(
             session=session,
@@ -186,7 +219,10 @@ class SessionIntelligenceService:
             current_intent=intent,
             friction_level=friction_level,
             abandonment_probability=abandonment_prob,
-            previous_recommendations=previous_recs
+            previous_recommendations=previous_recs,
+            transaction_intent=transaction_intent,
+            information_interest=information_interest,
+            engagement_state=engagement_state
         )
         top_rec = recommendations[0] if recommendations else None
         
@@ -203,6 +239,9 @@ class SessionIntelligenceService:
             "intent": intent,
             "intent_confidence": intent_conf,
             "intent_reason": intent_reason,
+            "transaction_intent": transaction_intent,
+            "information_interest": information_interest,
+            "engagement_state": engagement_state,
             "abandonment_probability": abandonment_prob,
             "abandonment_risk_level": risk_level,
             "abandonment_reason": abandonment_reason,
@@ -212,5 +251,7 @@ class SessionIntelligenceService:
             "session_quality_score": quality_score,
             "session_quality_explanation": quality_reason,
             "guidance": guidance,
-            "top_recommendation": top_rec
+            "top_recommendation": top_rec,
+            "recommendations": recommendations[:5],
+            "historical_profile": hist_profile
         }

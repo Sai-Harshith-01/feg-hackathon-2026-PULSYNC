@@ -141,6 +141,11 @@ def get_user(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return UserProfilingService.get_user_summary(db, user.id)
 
+@app.get("/api/users/{id}/profile", tags=["Users"])
+def get_user_compact_profile(id: str, db: Session = Depends(get_db)):
+    """Fetch compact FEG historical behavioral profile for user."""
+    return UserProfilingService.get_historical_player_profile(db, id)
+
 # ==================================================
 # Sessions Endpoints
 # ==================================================
@@ -502,7 +507,7 @@ def list_sports_rail(db: Session = Depends(get_db)):
     Returns list of sports aggregated from real dataset in pulsync.db.
     """
     rows = (
-        db.query(Event.sport, func.count(Event.id))
+        db.query(Event.sport, func.count(func.distinct(Event.match_id)), func.count(Event.id))
         .filter(Event.sport.isnot(None), Event.sport != "")
         .group_by(Event.sport)
         .order_by(func.count(Event.id).desc())
@@ -510,15 +515,10 @@ def list_sports_rail(db: Session = Depends(get_db)):
     )
     
     sports = []
-    for sport_name, evt_cnt in rows:
+    for sport_name, match_cnt, evt_cnt in rows:
         if sport_name in ["World Lotteries", "TOP OFFER"]:
             continue
         slug = get_sport_slug(sport_name)
-        match_cnt = (
-            db.query(func.count(func.distinct(Event.match_id)))
-            .filter(Event.sport == sport_name, Event.match_id.isnot(None))
-            .scalar() or 0
-        )
         sports.append({
             "id": slug,
             "slug": slug,

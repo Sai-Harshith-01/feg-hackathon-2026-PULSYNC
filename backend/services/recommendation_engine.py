@@ -102,9 +102,16 @@ class RecommendationEngine:
         current_intent: str,
         friction_level: str,
         abandonment_probability: float,
-        previous_recommendations: List[Recommendation]
+        previous_recommendations: List[Recommendation],
+        transaction_intent: str = "LOW",
+        information_interest: str = "HIGH",
+        engagement_state: str = "VALUE_SEEKING"
     ) -> List[Dict[str, Any]]:
         
+        # 0. Respect Exit condition
+        if engagement_state == "RESPECT_EXIT" or (transaction_intent == "LOW" and information_interest == "LOW"):
+            return []
+
         current_page = events[-1].page.lower() if events and events[-1].page else "match_detail"
         recent_event_types = [e.event_type.lower() for e in events[-5:] if e.event_type]
         
@@ -115,11 +122,22 @@ class RecommendationEngine:
         
         user_segment = user.segment if user else "Casual Explorer"
         
+        # Allowed candidate types for VALUE_SEEKING mode
+        allowed_types = None
+        if engagement_state == "VALUE_SEEKING" or (transaction_intent == "LOW" and information_interest == "HIGH"):
+            allowed_types = {
+                "Team Comparison", "Head-to-Head", "Team Form", 
+                "Key Statistics", "Match Insights", "Save for Later"
+            }
+        
         scored_candidates = []
         
         for cand in cls.CANDIDATES:
             cand_id = cand["id"]
             cand_type = cand["type"]
+            
+            if allowed_types and cand_type not in allowed_types:
+                continue
             
             # 1. Intent Relevance (0 - 1.0)
             if current_intent in cand["best_intents"]:
