@@ -147,17 +147,15 @@ def get_user(id: str, db: Session = Depends(get_db)):
 def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
     """Initialize a new user session."""
     sid = payload.id or payload.session_id or f"sess_{uuid.uuid4().hex[:10]}"
-    uid = payload.user_id or payload.anonymous_user_id
+    anon_id = payload.anonymous_user_id or payload.anonymous_id or payload.user_id
+    uid = payload.user_id or anon_id
     
     existing = db.query(DBSession).filter(DBSession.id == sid).first()
     if existing:
         existing.session_id = existing.id
         return existing
         
-    user = None
-    if uid:
-        user = UserProfilingService.get_or_create_user(db, uid, anonymous_id=payload.anonymous_user_id)
-        
+    user = UserProfilingService.get_or_create_user(db, user_id=uid, anonymous_id=anon_id)
     session_user_id = user.id if user else uid
     session = DBSession(
         id=sid,

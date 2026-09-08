@@ -16,49 +16,40 @@ class UserProfilingService:
     ]
     
     @classmethod
-    def get_or_create_user(cls, db: Session, user_id: str, anonymous_id: Optional[str] = None) -> UserProfile:
-        anon_id = anonymous_id or user_id
-        # 1. Check if user already exists
+    def get_or_create_user(cls, db: Session, user_id: Optional[str] = None, anonymous_id: Optional[str] = None) -> UserProfile:
+        anon = anonymous_id or user_id
+        if not anon:
+            anon = f"anon_{uuid.uuid4().hex[:10]}"
+            
+        # 1. Query existing user by anonymous_id or id
         user = db.query(UserProfile).filter(
-            (UserProfile.id == user_id) | 
-            (UserProfile.anonymous_id == anon_id) |
-            (UserProfile.id == anon_id)
+            (UserProfile.anonymous_id == anon) | 
+            ((UserProfile.id == user_id) if user_id else False)
         ).first()
         if user:
             return user
             
-        # 2. Attempt atomic insert with IntegrityError guard
+        # 2. Create user if not present
+        uid = user_id or f"usr_{uuid.uuid4().hex[:10]}"
         try:
             user = UserProfile(
-                id=user_id,
-                anonymous_id=anon_id,
+                id=uid,
+                anonymous_id=anon,
                 segment="Casual Explorer"
             )
             db.add(user)
             db.commit()
             db.refresh(user)
             return user
-        except Exception:
+        except IntegrityError:
             db.rollback()
             existing = db.query(UserProfile).filter(
-                (UserProfile.id == user_id) | 
-                (UserProfile.anonymous_id == anon_id) |
-                (UserProfile.id == anon_id)
+                (UserProfile.anonymous_id == anon) | 
+                ((UserProfile.id == user_id) if user_id else False)
             ).first()
             if existing:
                 return existing
-            
-            fresh_anon = f"anon_{uuid.uuid4().hex[:10]}"
-            user = UserProfile(
-                id=user_id,
-                anonymous_id=fresh_anon,
-                segment="Casual Explorer"
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            return user
-        return user
+            raise
 
     @classmethod
     def update_profile(cls, db: Session, user_id: str) -> UserProfile:
