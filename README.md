@@ -1,4 +1,4 @@
-# feg-hackathon-2026-PULSYNC
+# feg-hackathon-2026--PULSYNC
 
 ## PULSYNC
 
