@@ -36,7 +36,7 @@ import SportsRail from '@/components/SportsRail.vue'
 import SportFeed from '@/components/SportFeed.vue'
 import ContextualGuidanceBanner from '@/components/ContextualGuidanceBanner.vue'
 import BetSlip from '@/components/BetSlip.vue'
-import type { EventItem, SelectionItem } from '@/services/api'
+import { getActiveSessionId, trackSessionEvent, type EventItem, type SelectionItem } from '@/services/api'
 
 const route = useRoute()
 
@@ -52,6 +52,10 @@ function onSelectOdd(item: { event: EventItem; selection: SelectionItem }) {
     selections.value[existingIdx] = item
   } else {
     selections.value.push(item)
+  }
+  const sessionId = getActiveSessionId()
+  if (sessionId) {
+    void trackSessionEvent(sessionId, 'market_view', '/market', 'select_odd')
   }
 }
 

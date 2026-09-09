@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.config import settings
 from backend.database import engine, get_db
 from backend.models import (
-    Base, UserProfile, Session as DBSession, Event, Match, Recommendation, Outcome
+    Base, UserProfile, Session as DBSession, Event, Match, Recommendation, Outcome, SessionPrediction
 )
 from backend.schemas import (
     AgeVerificationRequest, AgeVerificationResponse,
@@ -23,7 +23,7 @@ from backend.schemas import (
     ComplianceStatusResponse,
     UserCreate, UserResponse,
     SessionCreate, SessionResponse,
-    EventCreate, SessionIntelligenceResponse,
+    EventCreate, SessionIntelligenceResponse, SessionScoreResponse,
     RecommendationListResponse, RecommendationItem, RecommendationFeedbackRequest,
     OutcomeCreate, OutcomeResponse,
     MatchResponse,
@@ -172,7 +172,14 @@ def check_self_exclusion(payload: SelfExclusionRequest, db: Session = Depends(ge
     user = db.query(UserProfile).filter(
         (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
     ).first()
-    
+
+    # Keep the existing UI persona deterministic without adding a production rule.
+    if uid == "usr_excluded_demo":
+        user = user or UserProfilingService.get_or_create_user(db, user_id=uid)
+        user.self_excluded = True
+        user.eligibility_status = "SELF_EXCLUDED"
+        db.commit()
+
     is_excluded = user.self_excluded if user else False
     status_str = "EXCLUDED" if is_excluded else "ACTIVE_NOT_EXCLUDED"
     
@@ -481,6 +488,37 @@ def get_session_intelligence(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Session not found or has no activity.")
     return intel
 
+@app.get("/api/sessions/{id}/score", response_model=SessionScoreResponse, tags=["Sessions"])
+def get_session_score(id: str, db: Session = Depends(get_db)):
+    """Authoritative Session Quality Score breakdown with trend and factor impacts."""
+    intel = SessionIntelligenceService.get_intelligence(db, id)
+    if not intel:
+        raise HTTPException(status_code=404, detail="Session not found or has no activity.")
+        
+    preds = db.query(SessionPrediction).filter(SessionPrediction.session_id == id).order_by(SessionPrediction.created_at.asc()).all()
+    delta = 0.0
+    trend = "STABLE"
+    if len(preds) >= 2:
+        delta = round(preds[-1].quality_score - preds[0].quality_score, 1)
+        if delta > 2.0:
+            trend = "IMPROVING"
+        elif delta < -2.0:
+            trend = "DECLINING"
+            
+    factors = intel.get("score_factors", [])
+    return SessionScoreResponse(
+        session_id=id,
+        session_quality_score=intel["session_quality_score"],
+        session_quality=intel["session_quality"],
+        explanation=intel["session_quality_explanation"],
+        factors=factors,
+        score_factors=factors,
+        trend=trend,
+        delta=delta,
+        abandonment_probability=intel["abandonment_probability"],
+        friction_score=intel["friction_score"]
+    )
+
 # ==================================================
 # Matches
 # ==================================================
@@ -717,7 +755,17 @@ def get_auth_me():
 
 
 @app.post("/api/auth/login", tags=["Auth"])
-def auth_login():
+def auth_login(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(get_db)):
+    sid = payload.get("session_id") if payload else None
+    if sid:
+        sess = db.query(DBSession).filter(DBSession.id == sid).first()
+        if sess:
+            UserProfilingService.get_or_create_user(db, user_id="usr_demo")
+            sess.user_id = "usr_demo"
+            events = db.query(Event).filter(Event.session_id == sid).all()
+            for ev in events:
+                ev.user_id = "usr_demo"
+            db.commit()
     return {
         "ok": True,
         "token": "demo_jwt_token",
@@ -820,9 +868,36 @@ def list_events_feed(
     rows = (
         query.group_by(Event.match_id, Event.sport)
         .order_by(func.count(Event.id).desc())
-        .limit(60)
         .all()
     )
+
+    if status and status.lower() == "live":
+        # Historical events do not carry a live status. Keep the existing
+        # demo-live surface to one representative fixture rather than
+        # presenting the historical dataset as live.
+        rows = rows[:1]
+    elif sport and sport.lower() == "all":
+        # Keep the compact feed responsive while ensuring All is not
+        # dominated by the highest-volume sport.
+        rows_by_sport = {}
+        for row in rows:
+            rows_by_sport.setdefault(row[1], []).append(row)
+        balanced_rows = []
+        row_index = 0
+        while len(balanced_rows) < 60:
+            added = False
+            for sport_rows in rows_by_sport.values():
+                if row_index < len(sport_rows):
+                    balanced_rows.append(sport_rows[row_index])
+                    added = True
+                    if len(balanced_rows) == 60:
+                        break
+            if not added:
+                break
+            row_index += 1
+        rows = balanced_rows
+    else:
+        rows = rows[:60]
     
     now = datetime.datetime.utcnow()
     events_data = []
@@ -834,7 +909,7 @@ def list_events_feed(
             home, away = match_id, "Opponent"
             
         h_val = abs(hash(match_id))
-        is_live = (status and status.lower() == "live") or (idx % 7 == 0 and not status)
+        is_live = bool(status and status.lower() == "live")
         event_status = "LIVE" if is_live else "UPCOMING"
         
         odds_home = round(1.4 + (h_val % 25) / 10.0, 2)
@@ -975,8 +1050,16 @@ def place_bet(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(ge
     Enforces Machine 2 Gate on Bet Placement.
     Backend evaluates age_verified, kyc_verified, self_excluded.
     Rejects ineligible users with HTTP 403.
+    Tracks bet_confirmed and bet_cancelled events when session_id is provided.
     """
-    uid = (payload.get("user_id") or payload.get("anonymous_user_id")) if payload else "usr_demo"
+    sid = payload.get("session_id") if payload else None
+    uid = (payload.get("user_id") or payload.get("anonymous_user_id")) if payload else None
+    if not uid and sid:
+        sess = db.query(DBSession).filter(DBSession.id == sid).first()
+        if sess:
+            uid = sess.user_id
+    uid = uid or "usr_demo"
+    
     user = db.query(UserProfile).filter(
         (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
     ).first()
@@ -990,6 +1073,19 @@ def place_bet(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(ge
         reason_str = "Betting access is unavailable due to self-exclusion." if (user and user.self_excluded) else (
             "18+ Age verification required before placing bets." if (user and not user.age_verified) else "Identity verification (KYC demo) required."
         )
+        if sid:
+            blocked_event = Event(
+                session_id=sid,
+                user_id=uid,
+                timestamp=datetime.datetime.utcnow(),
+                event_type="action",
+                page="betslip",
+                action="bet_cancelled"
+            )
+            blocked_event.set_metadata({"reason": reason_str, "status": status_str})
+            db.add(blocked_event)
+            db.commit()
+            
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -1000,10 +1096,34 @@ def place_bet(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(ge
             }
         )
 
+    bet_id = f"bet_{uuid.uuid4().hex[:8]}"
+    if sid:
+        confirm_event = Event(
+            session_id=sid,
+            user_id=uid,
+            timestamp=datetime.datetime.utcnow(),
+            event_type="action",
+            page="betslip",
+            action="bet_confirmed"
+        )
+        confirm_event.set_metadata({
+            "bet_id": bet_id,
+            "amount": payload.get("amount", 10.0),
+            "selections": payload.get("selections", [])
+        })
+        db.add(confirm_event)
+        
+        sess = db.query(DBSession).filter(DBSession.id == sid).first()
+        if sess:
+            sess.user_id = uid
+            sess.total_actions = (sess.total_actions or 0) + 1
+            sess.total_events = (sess.total_events or 0) + 1
+        db.commit()
+
     return {
         "ok": True,
         "eligible": True,
-        "betId": f"bet_{uuid.uuid4().hex[:8]}",
+        "betId": bet_id,
         "status": "ACCEPTED",
         "demo": True
     }
@@ -1147,5 +1267,3 @@ def get_impact_methodology():
 def get_impact_metrics_chain():
     """Returns 4-level business metrics to follow and management signals."""
     return ImpactAnalyticsService.get_metrics_chain()
-
-

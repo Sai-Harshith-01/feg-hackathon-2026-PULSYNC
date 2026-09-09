@@ -76,7 +76,7 @@
           <input v-model="email" type="email" class="rounded border border-border bg-background px-3 py-1.5 text-xs text-slate-100 focus:border-blue-500 focus:outline-none" />
         </div>
 
-        <button @click="currentStep = 1" class="mt-2 w-full rounded bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-500">
+        <button @click="continueRegistration" class="mt-2 w-full rounded bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-500">
           Continue to 18+ Age Verification →
         </button>
       </div>
@@ -221,7 +221,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ShieldCheck, X, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-vue-next'
-import { verifyAgeApi, submitKycDemoApi, checkSelfExclusionApi, checkBettingEligibilityApi, type BettingEligibilityResult } from '@/services/api'
+import { verifyAgeApi, submitKycDemoApi, checkSelfExclusionApi, checkBettingEligibilityApi, getActiveSessionId, loginApi, type BettingEligibilityResult } from '@/services/api'
 
 const props = defineProps<{
   show: boolean
@@ -249,6 +249,11 @@ const docType = ref('National ID')
 const checkingExclusion = ref(false)
 const exclusionResult = ref<any>(null)
 const eligibilityResult = ref<BettingEligibilityResult | null>(null)
+
+async function continueRegistration() {
+  await loginApi(getActiveSessionId() || undefined)
+  currentStep.value = 1
+}
 
 function selectPersona(type: string) {
   activePersona.value = type

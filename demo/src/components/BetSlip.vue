@@ -87,7 +87,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Ticket, Receipt, X } from 'lucide-vue-next'
-import { checkBettingEligibilityApi, placeBetApi, type EventItem, type SelectionItem } from '@/services/api'
+import { checkBettingEligibilityApi, getActiveSessionId, placeBetApi, trackSessionEvent, type EventItem, type SelectionItem } from '@/services/api'
 import ComplianceGateModal from './ComplianceGateModal.vue'
 
 const props = defineProps<{
@@ -110,23 +110,28 @@ const potentialPayout = computed(() => {
 
 async function handlePlaceBet() {
   const userId = 'usr_demo'
-  const eligibility = await checkBettingEligibilityApi(userId)
+  const sessionId = getActiveSessionId()
+  if (sessionId) {
+    await trackSessionEvent(sessionId, 'betslip_view', '/betslip', 'review_selection')
+    await trackSessionEvent(sessionId, 'place_bet_clicked', '/betslip', 'place_bet')
+  }
+  const eligibility = await checkBettingEligibilityApi(userId, sessionId || undefined)
   
   if (!eligibility.eligible) {
     showComplianceGate.value = true
     return
   }
 
-  await executeBetPlacement(userId)
+  await executeBetPlacement(userId, sessionId)
 }
 
 async function onEligibilityGranted() {
-  await executeBetPlacement('usr_demo')
+  await executeBetPlacement('usr_demo', getActiveSessionId())
 }
 
-async function executeBetPlacement(userId: string) {
+async function executeBetPlacement(userId: string, sessionId: string | null) {
   try {
-    const result = await placeBetApi(userId, props.selections, stake.value)
+    const result = await placeBetApi(userId, props.selections, stake.value, sessionId || undefined)
     alert(`Demo Selection Placed! Bet ID: ${result.betId}. Potential return: €${potentialPayout.value.toFixed(2)}`)
     emit('clear-slip')
   } catch (err: any) {

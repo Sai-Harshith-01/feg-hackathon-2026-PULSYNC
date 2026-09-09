@@ -159,26 +159,28 @@ export async function fetchAnalytics(): Promise<any> {
 }
 
 export async function createSession(anonymousId: string): Promise<string> {
-  try {
-    const res = await api.post('/api/sessions', { anonymous_user_id: anonymousId })
-    return res.data.session_id || `ses_${Date.now()}`
-  } catch (e) {
-    return `ses_${Date.now()}`
+  const res = await api.post('/api/sessions', { anonymous_user_id: anonymousId })
+  const sessionId = res.data.session_id || res.data.id
+  if (!sessionId) {
+    throw new Error('Session API returned no session identifier')
   }
+  localStorage.setItem('pulsync_session_id', sessionId)
+  return sessionId
+}
+
+export function getActiveSessionId(): string | null {
+  return localStorage.getItem('pulsync_session_id')
 }
 
 export async function trackSessionEvent(sessionId: string, eventType: string, page: string, action: string) {
-  try {
-    const res = await api.post(`/api/sessions/${sessionId}/events`, {
-      event_type: eventType,
-      page,
-      action,
-      timestamp: new Date().toISOString()
-    })
-    return res.data
-  } catch (e) {
-    return null
-  }
+  const res = await api.post(`/api/sessions/${sessionId}/events`, {
+    event_type: eventType,
+    page,
+    action,
+    timestamp: new Date().toISOString()
+  })
+  window.dispatchEvent(new CustomEvent('pulsync-session-updated', { detail: sessionId }))
+  return res.data
 }
 
 export async function fetchRecommendations(sessionId: string): Promise<RecommendationItem[]> {
@@ -197,6 +199,11 @@ export async function fetchSessionIntelligence(sessionId: string): Promise<Sessi
   } catch (e) {
     return null
   }
+}
+
+export async function loginApi(sessionId?: string) {
+  const res = await api.post('/api/auth/login', { session_id: sessionId })
+  return res.data
 }
 
 export interface BettingEligibilityResult {
@@ -250,40 +257,29 @@ export async function checkSelfExclusionApi(userId: string) {
 }
 
 export async function checkBettingEligibilityApi(userId: string, sessionId?: string): Promise<BettingEligibilityResult> {
-  try {
-    const res = await api.post<BettingEligibilityResult>('/api/compliance/betting-eligibility', {
-      user_id: userId,
-      anonymous_user_id: userId,
-      session_id: sessionId
-    })
-    return res.data
-  } catch (e) {
-    return {
-      eligible: false,
-      age_verified: false,
-      kyc_verified: false,
-      self_excluded: false,
-      reason: 'PENDING_VERIFICATION',
-      status: 'PENDING_VERIFICATION',
-      demo: true
-    }
-  }
+  const res = await api.post<BettingEligibilityResult>('/api/compliance/betting-eligibility', {
+    user_id: userId,
+    anonymous_user_id: userId,
+    session_id: sessionId
+  })
+  return res.data
 }
 
-export async function placeBetApi(userId: string, selections: any[], stake: number) {
+export async function placeBetApi(userId: string, selections: any[], stake: number, sessionId?: string) {
   try {
     const res = await api.post('/api/bets', {
       user_id: userId,
       anonymous_user_id: userId,
+      session_id: sessionId,
       selections,
       stake
     })
     return res.data
   } catch (e: any) {
-    if (e.response && e.response.data && e.response.data.detail) {
+    if (e.response?.data?.detail) {
       throw e.response.data.detail
     }
-    throw { eligible: false, status: 'BETTING_BLOCKED', reason: 'Betting placement failed.' }
+    throw e
   }
 }
 
@@ -557,5 +553,3 @@ export async function fetchImpactMetricsChain(): Promise<MetricsChainData> {
   const res = await api.get<MetricsChainData>('/api/impact/metrics-chain')
   return res.data
 }
-
-

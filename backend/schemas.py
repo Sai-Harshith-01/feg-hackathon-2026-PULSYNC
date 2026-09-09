@@ -194,6 +194,18 @@ class SessionIntelligenceResponse(BaseModel):
     session_quality: Optional[float] = None
     session_quality_score: float
     session_quality_explanation: str
+    # Detailed scoring breakdown and action metrics (Machine 3)
+    score_factors: Optional[List[Dict[str, Any]]] = []
+    actions_count: Optional[int] = 0
+    time_to_first_action_seconds: Optional[float] = None
+    last_action: Optional[str] = None
+    final_step_conversion: Optional[bool] = False
+    # Top-level compliance status
+    betting_eligible: Optional[bool] = False
+    age_verified: Optional[bool] = False
+    kyc_verified: Optional[bool] = False
+    self_excluded: Optional[bool] = False
+    updated_at: Optional[str] = None
     # Guidance & recommendations
     guidance: GuidanceResponse
     top_recommendation: Optional[Dict[str, Any]] = None
@@ -201,6 +213,18 @@ class SessionIntelligenceResponse(BaseModel):
     intelligence: Optional[Dict[str, Any]] = None
     # Compliance (from Machine 2 — read-only here)
     compliance: Optional[Dict[str, Any]] = None
+
+class SessionScoreResponse(BaseModel):
+    session_id: str
+    session_quality_score: float
+    session_quality: float
+    explanation: str
+    factors: List[Dict[str, Any]] = []
+    score_factors: List[Dict[str, Any]] = []
+    trend: str = "STABLE" # IMPROVING, STABLE, DECLINING
+    delta: float = 0.0
+    abandonment_probability: float = 0.0
+    friction_score: float = 0.0
 
 # ==================================================
 # Recommendation Schemas

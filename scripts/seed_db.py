@@ -44,14 +44,13 @@ def seed_database():
         'session_duration': 'duration_seconds'
     })
     db_sessions['is_synthetic'] = True
-    db_sessions['abandonment_risk'] = None
     db_sessions['friction_score'] = None
     
     # Select columns matching the table
     session_cols = [
         'id', 'user_id', 'is_synthetic', 'started_at', 'ended_at', 
         'duration_seconds', 'total_events', 'total_actions', 'unique_sports',
-        'abandonment_risk', 'friction_score'
+        'friction_score'
     ]
     db_sessions[session_cols].to_sql("sessions", con=engine, if_exists="append", index=False)
     print(f"-> Inserted {len(db_sessions)} synthetic sessions.")

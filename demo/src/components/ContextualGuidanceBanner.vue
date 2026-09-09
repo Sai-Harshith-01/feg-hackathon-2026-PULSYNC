@@ -173,10 +173,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { Sparkles, Info, ChevronRight, BarChart2, X, CheckCircle2, MessageCircle } from 'lucide-vue-next'
 import {
-  createSession, fetchRecommendations, fetchSessionIntelligence,
+  createSession, fetchSessionIntelligence,
   trackSessionEvent, type RecommendationItem, type SessionIntel
 } from '@/services/api'
 
@@ -190,10 +190,25 @@ onMounted(async () => {
   const anonId = localStorage.getItem('pulsync_anon_id') || crypto.randomUUID()
   localStorage.setItem('pulsync_anon_id', anonId)
 
-  sessionId.value = await createSession(anonId)
-  await trackSessionEvent(sessionId.value, 'page_view', '/sport', 'browse')
-  // Fetch full intelligence (includes recommendations + Machine 3 signals)
+  try {
+    sessionId.value = await createSession(anonId)
+    await trackSessionEvent(sessionId.value, 'page_view', '/sport', 'browse')
+    // Fetch full intelligence (includes recommendations + Machine 3 signals)
+    intel.value = await fetchSessionIntelligence(sessionId.value)
+  } catch (error) {
+    console.error('Unable to initialize PULSYNC session intelligence', error)
+  }
+  window.addEventListener('pulsync-session-updated', refreshIntelligence)
+})
+
+async function refreshIntelligence(event?: Event) {
+  const session = (event as CustomEvent<string> | undefined)?.detail
+  if (!sessionId.value || (session && session !== sessionId.value)) return
   intel.value = await fetchSessionIntelligence(sessionId.value)
+}
+
+onUnmounted(() => {
+  window.removeEventListener('pulsync-session-updated', refreshIntelligence)
 })
 
 async function clickGuidance(rec: RecommendationItem) {
@@ -203,7 +218,7 @@ async function clickGuidance(rec: RecommendationItem) {
     const action = (rec.content_type || rec.title || '').toLowerCase().replace(/\s+/g, '_')
     await trackSessionEvent(sessionId.value, `recommendation_click`, '/sport', action)
     // Refresh intelligence after click
-    intel.value = await fetchSessionIntelligence(sessionId.value)
+    await refreshIntelligence()
   }
 }
 
@@ -231,4 +246,3 @@ function engagementBadgeClass(val?: string) {
   return 'bg-emerald-900/60 text-emerald-300'
 }
 </script>
-

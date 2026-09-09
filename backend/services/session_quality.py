@@ -1,10 +1,23 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 from backend.models import Event
 
 class SessionQualityEngine:
     """
-    Computes an explainable session quality score (0 - 100).
+    Computes an authoritative, explainable session quality score (0 - 100).
     Measures meaningful fan comprehension, engagement, and navigational ease.
+    
+    Formula:
+        session_quality =
+            base_score (50.0)
+            + positive_engagement (up to +20)
+            + information_value (up to +20)
+            + action_progression (up to +15)
+            + recommendation_engagement (up to +15)
+            - friction_penalty (down to -25)
+            - abandonment_penalty (down to -25)
+            - repetition_penalty (down to -10)
+            
+    Clamped strictly: 0 <= session_quality <= 100.
     """
     
     @classmethod
@@ -14,46 +27,99 @@ class SessionQualityEngine:
         friction_score: float,
         abandonment_prob: float
     ) -> Tuple[float, str]:
+        score, explanation, _ = cls.evaluate_quality_detailed(events, friction_score, abandonment_prob)
+        return score, explanation
+
+    @classmethod
+    def evaluate_quality_detailed(
+        cls,
+        events: List[Event],
+        friction_score: float,
+        abandonment_prob: float
+    ) -> Tuple[float, str, List[Dict[str, Any]]]:
         """
-        Returns: (quality_score: 0-100, explanation: str)
+        Returns: (quality_score: 0-100, explanation_str, score_factors: List[Dict])
         """
         if not events:
-            return 80.0, "Session started; initial quality baseline established."
+            return 75.0, "Session started; initial quality baseline established.", [
+                {"factor": "baseline", "impact": 75, "reason": "Initial session initiation baseline established."}
+            ]
             
-        base_score = 75.0
+        base_score = 50.0
+        factors: List[Dict[str, Any]] = [
+            {"factor": "session_baseline", "impact": 50, "reason": "Baseline platform interaction."}
+        ]
         explanations = []
         
-        # 1. Meaningful action bonus
-        actions_count = sum(1 for e in events if e.action)
-        if actions_count >= 3:
-            base_score += 15.0
-            explanations.append(f"High engagement with content actions ({actions_count} interactions)")
-        elif actions_count >= 1:
-            base_score += 8.0
-            explanations.append("User actively interacted with match details")
+        all_actions = [e.action.lower() if e.action else "" for e in events]
+        all_types = [e.event_type.lower() if e.event_type else "" for e in events]
+        all_pages = [e.page.lower() if e.page else "" for e in events]
+        combined = " ".join(all_actions + all_types + all_pages)
+        
+        # 1. Positive engagement
+        meaningful_actions = sum(1 for a in all_actions if a and a not in ("page_view", "browse", "session_start"))
+        if meaningful_actions >= 4:
+            base_score += 20.0
+            factors.append({"factor": "positive_engagement", "impact": 20, "reason": f"Sustained interaction across {meaningful_actions} user actions."})
+            explanations.append(f"High engagement ({meaningful_actions} content interactions)")
+        elif meaningful_actions >= 1:
+            impact = 5.0 * meaningful_actions
+            base_score += impact
+            factors.append({"factor": "positive_engagement", "impact": int(impact), "reason": f"Active participation with {meaningful_actions} user actions."})
+            explanations.append("Active interaction with match details")
             
-        # 2. Content diversity bonus
-        unique_pages = len(set(e.page for e in events if e.page))
-        if unique_pages >= 3:
+        # 2. Information value (H2H, statistics, team comparison, team form, match insights)
+        info_terms = ["stat", "compare", "comparison", "h2h", "form", "insights", "save"]
+        info_count = sum(1 for e in events if any(t in f"{e.event_type or ''} {e.page or ''} {e.action or ''}".lower() for t in info_terms))
+        if info_count >= 2:
+            base_score += 20.0
+            factors.append({"factor": "information_value", "impact": 20, "reason": "Deep exploration of head-to-head analytics and team stats."})
+            explanations.append("Deep information engagement across comparative stats")
+        elif info_count == 1:
             base_score += 10.0
-            explanations.append("Healthy multi-perspective exploration across screens")
+            factors.append({"factor": "information_value", "impact": 10, "reason": "Inspected team statistics and fixture context."})
+            explanations.append("Inspected team statistics")
             
-        # 3. Penalize navigation friction
+        # 3. Action progression (e.g. progressing to market, betslip, or completed demo action)
+        if any(term in combined for term in ["betslip", "market", "bet_confirmed", "select"]):
+            base_score += 15.0
+            factors.append({"factor": "action_progression", "impact": 15, "reason": "User progressed purposefully toward market/selection resolution."})
+            explanations.append("Clear progression toward action resolution")
+            
+        # 4. Recommendation engagement
+        rec_clicks = sum(1 for a in all_actions if "recommendation_click" in a or "guidance" in a)
+        if rec_clicks >= 1:
+            base_score += 10.0
+            factors.append({"factor": "recommendation_engagement", "impact": 10, "reason": "User accepted contextual guidance and interacted with recommended content."})
+            explanations.append("Contextual recommendation interaction")
+            
+        # 5. Friction penalty
         if friction_score >= 70:
             base_score -= 25.0
-            explanations.append(f"Significant quality loss from navigation friction ({friction_score} pts)")
+            factors.append({"factor": "friction_penalty", "impact": -25, "reason": f"Severe navigation loops or back navigation friction ({friction_score} pts)."})
+            explanations.append(f"Significant quality loss from friction ({friction_score} pts)")
         elif friction_score >= 30:
             base_score -= 10.0
+            factors.append({"factor": "friction_penalty", "impact": -10, "reason": f"Minor navigational hesitation detected ({friction_score} pts)."})
             explanations.append("Minor deduction due to navigation hesitation")
             
-        # 4. Penalize high abandonment risk
+        # 6. Abandonment penalty
         if abandonment_prob >= 0.70:
             base_score -= 20.0
+            factors.append({"factor": "abandonment_penalty", "impact": -20, "reason": f"Elevated early abandonment probability ({int(abandonment_prob * 100)}%)."})
             explanations.append(f"Elevated abandonment risk ({int(abandonment_prob * 100)}%)")
         elif abandonment_prob >= 0.40:
             base_score -= 8.0
+            factors.append({"factor": "abandonment_penalty", "impact": -8, "reason": "Moderate abandonment risk."})
             
-        final_quality = round(max(10.0, min(100.0, base_score)), 1)
-        explanation_text = "; ".join(explanations) if explanations else "Standard smooth browsing session."
+        # 7. Repetition penalty
+        if any("cta_hesitation" in a for a in all_actions):
+            base_score -= 5.0
+            factors.append({"factor": "repetition_penalty", "impact": -5, "reason": "User exhibited CTA hesitation before deciding."})
+            explanations.append("Hesitation recorded on key CTA")
+            
+        final_quality = round(max(0.0, min(100.0, base_score)), 1)
+        explanation_text = "; ".join(explanations) if explanations else "Standard exploratory session."
         
-        return final_quality, explanation_text
+        return final_quality, explanation_text, factors
+

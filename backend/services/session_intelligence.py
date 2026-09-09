@@ -1,4 +1,4 @@
-﻿from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from backend.models import (
@@ -75,8 +75,27 @@ class SessionIntelligenceService:
             all_events, session.duration_seconds, friction_score)
         session.abandonment_probability = abandonment_prob
 
-        quality_score, quality_reason = SessionQualityEngine.evaluate_quality(all_events, friction_score, abandonment_prob)
+        quality_score, quality_reason, score_factors = SessionQualityEngine.evaluate_quality_detailed(
+            all_events, friction_score, abandonment_prob
+        )
         session.session_quality_score = quality_score
+
+        # Action and conversion metrics
+        action_events = [
+            e for e in all_events
+            if e.action and e.action.lower() not in ("page_view", "browse", "session_start")
+        ]
+        actions_count = len(action_events)
+        time_to_first_action = None
+        if action_events and all_events and all_events[0].timestamp and action_events[0].timestamp:
+            delta = (action_events[0].timestamp - all_events[0].timestamp).total_seconds()
+            time_to_first_action = round(max(0.0, delta), 2)
+            
+        last_action = action_events[-1].action if action_events else (all_events[-1].action if all_events and all_events[-1].action else None)
+        final_step_conversion = any(
+            (e.action and e.action.lower() in ("bet_confirmed", "bet_placed", "action_completed", "saved_to_betslip"))
+            for e in all_events
+        )
 
         transaction_intent = IntentDetector.calculate_transaction_intent(all_events)
         explicit_exit = _check_explicit_exit(all_events)
@@ -134,7 +153,9 @@ class SessionIntelligenceService:
             explicit_exit=explicit_exit, abandonment_prob=abandonment_prob,
             risk_level=risk_level, abandonment_reason=abandonment_reason,
             friction_score=friction_score, friction_level=friction_level, friction_reason=friction_reason,
-            quality_score=quality_score, quality_reason=quality_reason,
+            quality_score=quality_score, quality_reason=quality_reason, score_factors=score_factors,
+            actions_count=actions_count, time_to_first_action=time_to_first_action,
+            last_action=last_action, final_step_conversion=final_step_conversion,
             guidance=guidance, top_rec=top_rec, recommendations=recommendations,
             hist_profile=hist_profile, compliance=compliance,
         )
@@ -153,7 +174,25 @@ class SessionIntelligenceService:
         friction_score, friction_level, friction_reason = FrictionEngine.calculate_friction(all_events)
         abandonment_prob, risk_level, abandonment_reason = AbandonmentEngine.calculate_risk(
             all_events, session.duration_seconds, friction_score)
-        quality_score, quality_reason = SessionQualityEngine.evaluate_quality(all_events, friction_score, abandonment_prob)
+        quality_score, quality_reason, score_factors = SessionQualityEngine.evaluate_quality_detailed(
+            all_events, friction_score, abandonment_prob
+        )
+
+        action_events = [
+            e for e in all_events
+            if e.action and e.action.lower() not in ("page_view", "browse", "session_start")
+        ]
+        actions_count = len(action_events)
+        time_to_first_action = None
+        if action_events and all_events and all_events[0].timestamp and action_events[0].timestamp:
+            delta = (action_events[0].timestamp - all_events[0].timestamp).total_seconds()
+            time_to_first_action = round(max(0.0, delta), 2)
+            
+        last_action = action_events[-1].action if action_events else (all_events[-1].action if all_events and all_events[-1].action else None)
+        final_step_conversion = any(
+            (e.action and e.action.lower() in ("bet_confirmed", "bet_placed", "action_completed", "saved_to_betslip"))
+            for e in all_events
+        )
 
         transaction_intent = IntentDetector.calculate_transaction_intent(all_events)
         explicit_exit = _check_explicit_exit(all_events)
@@ -190,7 +229,9 @@ class SessionIntelligenceService:
             explicit_exit=explicit_exit, abandonment_prob=abandonment_prob,
             risk_level=risk_level, abandonment_reason=abandonment_reason,
             friction_score=friction_score, friction_level=friction_level, friction_reason=friction_reason,
-            quality_score=quality_score, quality_reason=quality_reason,
+            quality_score=quality_score, quality_reason=quality_reason, score_factors=score_factors,
+            actions_count=actions_count, time_to_first_action=time_to_first_action,
+            last_action=last_action, final_step_conversion=final_step_conversion,
             guidance=guidance, top_rec=top_rec, recommendations=recommendations,
             hist_profile=hist_profile, compliance=compliance,
         )
@@ -200,6 +241,8 @@ class SessionIntelligenceService:
                         transaction_intent, information_interest, engagement_state, recommendation_mode,
                         explicit_exit, abandonment_prob, risk_level, abandonment_reason,
                         friction_score, friction_level, friction_reason, quality_score, quality_reason,
+                        score_factors=None, actions_count=0, time_to_first_action=None,
+                        last_action=None, final_step_conversion=False,
                         guidance, top_rec, recommendations, hist_profile, compliance) -> Dict[str, Any]:
         engagement_message = None
         if engagement_state == "VALUE_SEEKING":
@@ -230,6 +273,16 @@ class SessionIntelligenceService:
             "session_quality": round(quality_score, 1),
             "session_quality_score": round(quality_score, 1),
             "session_quality_explanation": quality_reason,
+            "score_factors": score_factors or [],
+            "actions_count": actions_count,
+            "time_to_first_action_seconds": time_to_first_action,
+            "last_action": last_action,
+            "final_step_conversion": final_step_conversion,
+            "betting_eligible": compliance.get("betting_eligible", False) if compliance else False,
+            "age_verified": compliance.get("age_verified", False) if compliance else False,
+            "kyc_verified": compliance.get("kyc_verified", False) if compliance else False,
+            "self_excluded": compliance.get("self_excluded", False) if compliance else False,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
             "top_recommendation": top_rec,
             "recommendations": recommendations[:5],
             "guidance": guidance,
