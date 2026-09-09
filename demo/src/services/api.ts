@@ -96,6 +96,13 @@ export interface SessionIntel {
   abandonment_probability: number
   session_quality?: number
   session_quality_score?: number
+  continuation_probability?: number
+  model_source?: string
+  model_versions?: {
+    intent?: string
+    abandonment?: string
+    continuation?: string
+  }
   recommendations?: RecommendationItem[]
   top_recommendation?: RecommendationItem | null
   compliance?: {
@@ -103,6 +110,7 @@ export interface SessionIntel {
     self_excluded: boolean
     age_verified: boolean
     kyc_verified: boolean
+    login_required: boolean
   }
 }
 
