@@ -29,7 +29,6 @@ class AbandonmentEngine:
                 unique_matches = len(set(e.match_id for e in events if e.match_id))
                 last_event = events[-1]
                 features = {
-                    "events_so_far": len(events),
                     "unique_sports_so_far": unique_sports,
                     "unique_matches_so_far": unique_matches,
                     "is_prematch": 1 if last_event.event_type == "PREMATCH" else 0,

@@ -34,7 +34,7 @@ def train_and_evaluate():
     print(f"Split: Train {len(train_df)}, Val {len(val_df)}, Test {len(test_df)}")
     
     feature_cols = [
-        "events_so_far", "unique_sports_so_far", "unique_matches_so_far", 
+        "unique_sports_so_far", "unique_matches_so_far", 
         "is_prematch", "is_live", "is_lottery"
     ]
     

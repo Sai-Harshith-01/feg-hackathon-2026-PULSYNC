@@ -88,7 +88,6 @@ class SessionIntelligenceService:
         if registry.is_loaded() and all_events:
             try:
                 features = {
-                    "events_so_far": len(all_events),
                     "unique_sports_so_far": len(set(e.sport for e in all_events if e.sport)),
                     "unique_matches_so_far": len(set(e.match_id for e in all_events if e.match_id)),
                     "is_prematch": 1 if all_events[-1].event_type == "PREMATCH" else 0,

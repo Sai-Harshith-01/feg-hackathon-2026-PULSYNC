@@ -1,8 +1,7 @@
 {
   "version": "v1",
-  "training_timestamp": "2026-09-09T01:35:17.216495",
+  "training_timestamp": "2026-09-09T01:53:00.140375",
   "feature_list": [
-    "events_so_far",
     "unique_sports_so_far",
     "unique_matches_so_far",
     "is_prematch",
