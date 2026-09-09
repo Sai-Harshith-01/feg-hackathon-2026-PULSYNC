@@ -1,11 +1,11 @@
 from typing import List, Tuple
 from datetime import datetime
 from backend.models import Event
+from backend.ml.model_registry import ModelRegistry
 
 class AbandonmentEngine:
     """
-    Computes an explainable behavioral proxy for early session abandonment risk.
-    Note: Documented as an unsupervised behavioral proxy, NOT claimed as a validated supervised ML model.
+    Computes session abandonment risk. Uses ML model backed by heuristic safety fallback.
     """
     
     @classmethod
@@ -14,12 +14,34 @@ class AbandonmentEngine:
         events: List[Event], 
         session_duration_sec: float,
         friction_score: float
-    ) -> Tuple[float, str, str]:
+    ) -> Tuple[float, str, str, str]:
         """
-        Returns: (probability, risk_level, reason)
+        Returns: (probability, risk_level, reason, model_source)
         """
         if not events:
-            return 0.10, "LOW", "Session just initiated; baseline low abandonment risk."
+            return 0.10, "LOW", "Session just initiated; baseline low abandonment risk.", "heuristic_fallback"
+            
+        registry = ModelRegistry()
+        ml_prob = None
+        if registry.is_loaded():
+            try:
+                unique_sports = len(set(e.sport for e in events if e.sport))
+                unique_matches = len(set(e.match_id for e in events if e.match_id))
+                last_event = events[-1]
+                features = {
+                    "events_so_far": len(events),
+                    "unique_sports_so_far": unique_sports,
+                    "unique_matches_so_far": unique_matches,
+                    "is_prematch": 1 if last_event.event_type == "PREMATCH" else 0,
+                    "is_live": 1 if last_event.event_type == "LIVE" else 0,
+                    "is_lottery": 1 if last_event.event_type == "WORLD_LOTTERY" else 0
+                }
+                
+                prob_abandonment, _, _, _, _ = registry.predict(features)
+                ml_prob = round(prob_abandonment, 2)
+            except Exception as e:
+                print(f"ML abandonment failed: {e}")
+
             
         now = datetime.utcnow()
         last_event_time = events[-1].timestamp or now
@@ -64,6 +86,13 @@ class AbandonmentEngine:
             reasons.append("Active interaction with content cards mitigates abandonment risk")
             
         probability = round(min(0.95, max(0.05, score)), 2)
+        model_source = "heuristic_fallback"
+        reason_text = "Behavioral proxy: " + ("; ".join(reasons) if reasons else "Normal session pacing observed.")
+        
+        if ml_prob is not None:
+            probability = ml_prob
+            model_source = "ml"
+            reason_text = f"ML Prediction ({registry.get_version()}): Estimated abandonment risk based on {len(events)} events."
         
         if probability < 0.30:
             risk_level = "LOW"
@@ -72,5 +101,4 @@ class AbandonmentEngine:
         else:
             risk_level = "HIGH"
             
-        reason_text = "Behavioral proxy: " + ("; ".join(reasons) if reasons else "Normal session pacing observed.")
-        return probability, risk_level, reason_text
+        return probability, risk_level, reason_text, model_source
