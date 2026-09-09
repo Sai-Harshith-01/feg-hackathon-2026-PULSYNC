@@ -194,6 +194,13 @@ class SessionIntelligenceResponse(BaseModel):
     session_quality: Optional[float] = None
     session_quality_score: float
     session_quality_explanation: str
+    
+    # ML Outputs
+    continuation_probability: Optional[float] = None
+    intent_probabilities: Optional[Dict[str, float]] = None
+    model_source: Optional[str] = None
+    model_versions: Optional[Dict[str, str]] = None
+    
     # Detailed scoring breakdown and action metrics (Machine 3)
     score_factors: Optional[List[Dict[str, Any]]] = []
     actions_count: Optional[int] = 0

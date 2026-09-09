@@ -51,6 +51,33 @@ class SessionQualityEngine:
         ]
         explanations = []
         
+        from backend.ml.model_registry import ModelRegistry
+        registry = ModelRegistry()
+        ml_continuation_prob = None
+        
+        if registry.is_loaded():
+            try:
+                unique_sports = len(set(e.sport for e in events if e.sport))
+                unique_matches = len(set(e.match_id for e in events if e.match_id))
+                last_event = events[-1]
+                features = {
+                    "unique_sports_so_far": unique_sports,
+                    "unique_matches_so_far": unique_matches,
+                    "is_prematch": 1 if last_event.event_type == "PREMATCH" else 0,
+                    "is_live": 1 if last_event.event_type == "LIVE" else 0,
+                    "is_lottery": 1 if last_event.event_type == "WORLD_LOTTERY" else 0
+                }
+                _, prob_continuation, _, _, _ = registry.predict(features)
+                ml_continuation_prob = prob_continuation
+                
+                # ML Contribution: up to +15 for high continuation likelihood
+                ml_impact = (ml_continuation_prob - 0.5) * 30 # Range -15 to +15
+                base_score += ml_impact
+                factors.append({"factor": "ml_continuation", "impact": round(ml_impact, 1), "reason": f"ML continuation probability: {ml_continuation_prob:.0%}"})
+                explanations.append(f"ML Continuation likelihood {ml_continuation_prob:.0%}")
+            except Exception as e:
+                print(f"ML continuation failed: {e}")
+        
         all_actions = [e.action.lower() if e.action else "" for e in events]
         all_types = [e.event_type.lower() if e.event_type else "" for e in events]
         all_pages = [e.page.lower() if e.page else "" for e in events]
