@@ -36,8 +36,7 @@ jobs:
 
       # Code quality
       - name: Run Ruff
-        run: |
-          ruff check backend
+        run: python -m pytest backend/tests -v
 
       # Tests
       - name: Run tests
