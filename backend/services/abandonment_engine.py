@@ -106,7 +106,10 @@ class AbandonmentEngine:
             # underestimates an obviously stalled, high-friction session.
             probability = max(ml_prob, heuristic_probability)
             model_source = "ml"
-            reason_text = f"ML Prediction ({registry.get_version()}): Estimated abandonment risk based on {len(events)} events."
+            reason_text = (
+                f"ML Prediction ({registry.get_version()}): Estimated abandonment risk "
+                f"based on {len(events)} events; behavioral proxy safety signals retained."
+            )
         
         if probability < 0.30:
             risk_level = "LOW"
