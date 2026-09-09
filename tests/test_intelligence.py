@@ -81,6 +81,31 @@ def test_session_quality_scoring():
     assert final_quality >= 80.0
     assert "engagement" in explanation_text.lower() or "active" in explanation_text.lower()
 
+def test_detailed_session_quality_scoring_factors():
+    now = datetime.utcnow()
+    events = [
+        Event(session_id="s_det", event_type="match_view", page="match_detail", action="view_card", timestamp=now),
+        Event(session_id="s_det", event_type="statistics_view", page="statistics", action="inspect_h2h_stats", timestamp=now + timedelta(seconds=5)),
+        Event(session_id="s_det", event_type="action", page="betslip", action="select_market", timestamp=now + timedelta(seconds=10)),
+    ]
+    score, expl, factors = SessionQualityEngine.evaluate_quality_detailed(events, friction_score=5.0, abandonment_prob=0.10)
+    assert 0.0 <= score <= 100.0
+    assert len(factors) >= 3
+    factor_names = [f["factor"] for f in factors]
+    assert "session_baseline" in factor_names
+    assert "action_progression" in factor_names or "information_value" in factor_names
+    assert isinstance(expl, str) and len(expl) > 0
+
+def test_friction_engine_cta_hesitation():
+    now = datetime.utcnow()
+    e1 = Event(session_id="s_hes", event_type="page_view", page="match_detail", action="view_card", timestamp=now)
+    e2 = Event(session_id="s_hes", event_type="behavior_signal", page="match_detail", action="cta_hesitation", timestamp=now + timedelta(seconds=3))
+    e2.set_metadata({"dwell_ms": 4200, "target": "place_bet_btn"})
+    events = [e1, e2]
+    score, level, reason = FrictionEngine.calculate_friction(events)
+    assert score >= 15.0
+    assert "hesitation" in reason.lower()
+
 def test_dataset_validation_pipeline():
     import os
     from scripts.validate_dataset import validate

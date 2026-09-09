@@ -33,6 +33,13 @@
         >
           Promotions
         </router-link>
+        <router-link 
+          to="/impact" 
+          class="rounded px-3 py-1.5 text-xs font-semibold transition-colors"
+          :class="$route.path.startsWith('/impact') ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-accent hover:text-white'"
+        >
+          Impact & ROI
+        </router-link>
       </nav>
     </div>
 
@@ -53,10 +60,18 @@
         <Activity class="size-3.5" />
         <span>Analytics Portal</span>
       </router-link>
+
+      <router-link 
+        to="/impact" 
+        class="flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/20"
+      >
+        <TrendingUp class="size-3.5" />
+        <span>Impact & ROI</span>
+      </router-link>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { User, Activity } from 'lucide-vue-next'
+import { User, Activity, TrendingUp } from 'lucide-vue-next'
 </script>

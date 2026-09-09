@@ -54,6 +54,29 @@ class FrictionEngine:
         if len(recent) >= 5 and clicks == 0:
             score += 20.0
             reasons.append("Rapid page transitions without content consumption")
+
+        # 6. Aggregated CTA / interaction hesitation (behavior_signal, cta_hesitation)
+        hesitation_events = [
+            e for e in recent
+            if (e.action and "hesitation" in e.action.lower())
+            or (e.event_type and "behavior_signal" in e.event_type.lower())
+        ]
+        if hesitation_events:
+            max_dwell = 0
+            for he in hesitation_events:
+                meta = he.get_metadata() if hasattr(he, "get_metadata") else {}
+                dwell = meta.get("dwell_ms", 0) if isinstance(meta, dict) else 0
+                if dwell > max_dwell:
+                    max_dwell = dwell
+            if max_dwell >= 4000:
+                score += 20.0
+                reasons.append(f"Extended CTA hover hesitation ({max_dwell}ms dwell)")
+            elif max_dwell > 0:
+                score += 15.0
+                reasons.append(f"CTA hesitation detected ({max_dwell}ms hover)")
+            else:
+                score += 15.0
+                reasons.append("CTA hesitation recorded on key interaction element")
             
         friction_score = round(min(100.0, max(0.0, score)), 1)
         

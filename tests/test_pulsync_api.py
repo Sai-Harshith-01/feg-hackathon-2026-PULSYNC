@@ -73,6 +73,32 @@ def test_event_ingestion_and_intelligence():
     assert "abandonment_probability" in intel
     assert "session_quality_score" in intel
     assert "guidance" in intel
+    # Machine 3: new fields
+    assert "score_factors" in intel
+    assert "actions_count" in intel
+    assert "betting_eligible" in intel
+    assert "updated_at" in intel
+
+def test_session_score_endpoint():
+    session_id = "sess_test_score_01"
+    # Seed a couple of events
+    client.post(f"/api/sessions/{session_id}/events", json={
+        "event_type": "match_view", "page": "match_detail",
+        "action": "open_fixture", "sport": "Football"
+    })
+    client.post(f"/api/sessions/{session_id}/events", json={
+        "event_type": "statistics_view", "page": "statistics",
+        "action": "view_h2h", "sport": "Football"
+    })
+    # Fetch score
+    res = client.get(f"/api/sessions/{session_id}/score")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["session_id"] == session_id
+    assert 0.0 <= data["session_quality_score"] <= 100.0
+    assert data["trend"] in ("IMPROVING", "STABLE", "DECLINING")
+    assert isinstance(data["score_factors"], list)
+    assert len(data["score_factors"]) >= 1
 
 def test_recommendations_and_feedback():
     session_id = "sess_test_rec_01"

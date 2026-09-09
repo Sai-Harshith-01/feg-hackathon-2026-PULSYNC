@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,25 +13,29 @@ from sqlalchemy.exc import IntegrityError
 from backend.config import settings
 from backend.database import engine, get_db
 from backend.models import (
-    Base, UserProfile, Session as DBSession, Event, Match, Recommendation, Outcome
+    Base, UserProfile, Session as DBSession, Event, Match, Recommendation, Outcome, SessionPrediction
 )
 from backend.schemas import (
     AgeVerificationRequest, AgeVerificationResponse,
     SelfExclusionRequest, SelfExclusionResponse,
+    KYCDemoRequest, KYCDemoResponse,
+    BettingEligibilityRequest, BettingEligibilityResponse,
+    ComplianceStatusResponse,
     UserCreate, UserResponse,
     SessionCreate, SessionResponse,
-    EventCreate, SessionIntelligenceResponse,
+    EventCreate, SessionIntelligenceResponse, SessionScoreResponse,
     RecommendationListResponse, RecommendationItem, RecommendationFeedbackRequest,
     OutcomeCreate, OutcomeResponse,
     MatchResponse,
     DashboardMetricsResponse, DashboardSegmentsResponse,
     DashboardRecommendationsResponse, DashboardQualityResponse, DashboardImpactResponse,
-    DemoStartRequest
+    DemoStartRequest, ROISimulationRequest
 )
 from backend.services.user_profiling import UserProfilingService
 from backend.services.session_intelligence import SessionIntelligenceService
 from backend.services.dashboard_service import DashboardAnalyticsService
 from backend.services.demo_service import DemoSimulationService
+from backend.services.impact_service import ImpactAnalyticsService
 
 # Initialize database schema if not already present
 Base.metadata.create_all(bind=engine)
@@ -78,40 +82,229 @@ def health_check(db: Session = Depends(get_db)):
         )
 
 # ==================================================
-# Compliance MVP (Mock Integrations)
+# Compliance MVP (Machine 2 Implementation)
 # ==================================================
 @app.post("/api/compliance/age-verification", response_model=AgeVerificationResponse, tags=["Compliance"])
 def verify_age(payload: AgeVerificationRequest, db: Session = Depends(get_db)):
-    """Simulated mock age verification for MVP compliance demonstration."""
-    uid = payload.user_id
-    if uid:
-        user = db.query(UserProfile).filter(UserProfile.id == uid).first()
-        if user:
-            user.age_verified = True
-            db.commit()
+    """Conceptual 18+ age verification endpoint."""
+    uid = payload.user_id or payload.anonymous_user_id or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    if not user:
+        user = UserProfile(id=uid, anonymous_id=uid, segment="Casual Explorer")
+        db.add(user)
+        
+    is_underage = (payload.age is not None and payload.age < 18)
+    if payload.birth_date:
+        try:
+            dob = datetime.datetime.strptime(payload.birth_date, "%Y-%m-%d")
+            today = datetime.datetime.utcnow()
+            age_calculated = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            if age_calculated < 18:
+                is_underage = True
+        except ValueError:
+            pass
+
+    if is_underage:
+        user.age_verified = False
+        user.eligibility_status = "AGE_RESTRICTED"
+        db.commit()
+        return AgeVerificationResponse(
+            user_id=user.id,
+            is_verified=False,
+            verified=False,
+            minimum_age=18,
+            status="AGE_RESTRICTED",
+            provider="Simulated 18+ Attribute Verification"
+        )
+        
+    user.age_verified = True
+    user.age_verified_at = datetime.datetime.utcnow()
+    user.verification_method = payload.verification_method or "DEMO_ATTRIBUTE"
+    if user.kyc_verified and not user.self_excluded:
+        user.eligibility_status = "ELIGIBLE"
+    elif not user.kyc_verified:
+        user.eligibility_status = "KYC_REQUIRED"
+    db.commit()
+    
     return AgeVerificationResponse(
-        user_id=uid,
+        user_id=user.id,
         is_verified=True,
         verified=True,
         minimum_age=18,
-        status="VERIFIED_AGE_OVER_18"
+        status="VERIFIED_AGE_OVER_18",
+        provider="Simulated 18+ Attribute Verification"
+    )
+
+@app.post("/api/compliance/kyc-demo", response_model=KYCDemoResponse, tags=["Compliance"])
+def submit_kyc_demo(payload: KYCDemoRequest, db: Session = Depends(get_db)):
+    """Conceptual synthetic KYC verification step using dummy document types."""
+    uid = payload.user_id or payload.anonymous_user_id or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    if not user:
+        user = UserProfile(id=uid, anonymous_id=uid, age_verified=True)
+        db.add(user)
+        
+    user.kyc_verified = True
+    user.kyc_document_type = payload.document_type or "National ID"
+    if user.age_verified and not user.self_excluded:
+        user.eligibility_status = "ELIGIBLE"
+    db.commit()
+    
+    return KYCDemoResponse(
+        user_id=user.id,
+        kyc_verified=True,
+        document_type=user.kyc_document_type,
+        status="VERIFIED",
+        demo=True,
+        notice="Demo verification — no real identity data processed."
     )
 
 @app.post("/api/compliance/self-exclusion-check", response_model=SelfExclusionResponse, tags=["Compliance"])
 def check_self_exclusion(payload: SelfExclusionRequest, db: Session = Depends(get_db)):
-    """Simulated mock self-exclusion registry check for MVP compliance."""
-    uid = payload.user_id or payload.anonymous_user_id
-    is_excluded = False
-    if uid:
-        user = db.query(UserProfile).filter(
-            (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
-        ).first()
-        is_excluded = user.self_excluded if user else False
+    """Deterministic mock register check for excluded players."""
+    uid = payload.user_id or payload.anonymous_user_id or payload.demo_profile_id or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+
+    # Keep the existing UI persona deterministic without adding a production rule.
+    if uid == "usr_excluded_demo":
+        user = user or UserProfilingService.get_or_create_user(db, user_id=uid)
+        user.self_excluded = True
+        user.eligibility_status = "SELF_EXCLUDED"
+        db.commit()
+
+    is_excluded = user.self_excluded if user else False
+    status_str = "EXCLUDED" if is_excluded else "ACTIVE_NOT_EXCLUDED"
+    
     return SelfExclusionResponse(
         user_id=uid,
+        checked=True,
+        excluded=is_excluded,
         self_excluded=is_excluded,
         eligible=not is_excluded,
-        status="ACTIVE_NOT_EXCLUDED" if not is_excluded else "EXCLUDED"
+        source="DEMO_REGISTER",
+        status=status_str
+    )
+
+@app.post("/api/compliance/betting-eligibility", response_model=BettingEligibilityResponse, tags=["Compliance"])
+def evaluate_betting_eligibility(payload: BettingEligibilityRequest, db: Session = Depends(get_db)):
+    """
+    Core Machine 2 Gate: Returns single eligibility decision for betting access.
+    Checks age_verified == True AND kyc_verified == True AND self_excluded == False.
+    """
+    uid = payload.user_id or payload.anonymous_user_id
+    if not uid and payload.session_id:
+        sess = db.query(DBSession).filter(DBSession.id == payload.session_id).first()
+        if sess:
+            uid = sess.user_id
+            
+    uid = uid or "usr_demo"
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    if not user:
+        return BettingEligibilityResponse(
+            user_id=uid,
+            eligible=False,
+            age_verified=False,
+            kyc_verified=False,
+            self_excluded=False,
+            reason="PENDING_VERIFICATION",
+            status="PENDING_VERIFICATION",
+            demo=True
+        )
+        
+    if user.self_excluded:
+        return BettingEligibilityResponse(
+            user_id=user.id,
+            eligible=False,
+            age_verified=user.age_verified,
+            kyc_verified=user.kyc_verified,
+            self_excluded=True,
+            reason="Betting access is unavailable for this account due to self-exclusion.",
+            status="SELF_EXCLUDED",
+            demo=True
+        )
+
+    if not user.age_verified:
+        return BettingEligibilityResponse(
+            user_id=user.id,
+            eligible=False,
+            age_verified=False,
+            kyc_verified=user.kyc_verified,
+            self_excluded=False,
+            reason="Betting is available only after 18+ age verification.",
+            status="AGE_RESTRICTED",
+            demo=True
+        )
+
+    if not user.kyc_verified:
+        return BettingEligibilityResponse(
+            user_id=user.id,
+            eligible=False,
+            age_verified=True,
+            kyc_verified=False,
+            self_excluded=False,
+            reason="Identity verification (KYC demo) is required before placing bets.",
+            status="KYC_REQUIRED",
+            demo=True
+        )
+
+    user.eligibility_status = "ELIGIBLE"
+    db.commit()
+
+    return BettingEligibilityResponse(
+        user_id=user.id,
+        eligible=True,
+        age_verified=True,
+        kyc_verified=True,
+        self_excluded=False,
+        reason="ELIGIBLE",
+        status="ELIGIBLE",
+        demo=True
+    )
+
+@app.get("/api/compliance/status/{user_id}", response_model=ComplianceStatusResponse, tags=["Compliance"])
+def get_compliance_status(user_id: str, db: Session = Depends(get_db)):
+    """Exposes compliance status for Machine 3 & UI consumption."""
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == user_id) | (UserProfile.anonymous_id == user_id)
+    ).first()
+    
+    if not user:
+        return ComplianceStatusResponse(
+            user_id=user_id,
+            betting_eligible=False,
+            age_verified=False,
+            kyc_verified=False,
+            self_excluded=False,
+            status="PENDING_VERIFICATION"
+        )
+        
+    is_eligible = user.age_verified and user.kyc_verified and not user.self_excluded
+    status_str = "ELIGIBLE" if is_eligible else (
+        "SELF_EXCLUDED" if user.self_excluded else (
+            "AGE_RESTRICTED" if not user.age_verified else "KYC_REQUIRED"
+        )
+    )
+    
+    return ComplianceStatusResponse(
+        user_id=user.id,
+        anonymous_id=user.anonymous_id,
+        betting_eligible=is_eligible,
+        age_verified=user.age_verified,
+        kyc_verified=user.kyc_verified,
+        self_excluded=user.self_excluded,
+        status=status_str,
+        verification_method=user.verification_method or "DEMO_ATTRIBUTE"
     )
 
 # ==================================================
@@ -294,6 +487,37 @@ def get_session_intelligence(id: str, db: Session = Depends(get_db)):
     if not intel:
         raise HTTPException(status_code=404, detail="Session not found or has no activity.")
     return intel
+
+@app.get("/api/sessions/{id}/score", response_model=SessionScoreResponse, tags=["Sessions"])
+def get_session_score(id: str, db: Session = Depends(get_db)):
+    """Authoritative Session Quality Score breakdown with trend and factor impacts."""
+    intel = SessionIntelligenceService.get_intelligence(db, id)
+    if not intel:
+        raise HTTPException(status_code=404, detail="Session not found or has no activity.")
+        
+    preds = db.query(SessionPrediction).filter(SessionPrediction.session_id == id).order_by(SessionPrediction.created_at.asc()).all()
+    delta = 0.0
+    trend = "STABLE"
+    if len(preds) >= 2:
+        delta = round(preds[-1].quality_score - preds[0].quality_score, 1)
+        if delta > 2.0:
+            trend = "IMPROVING"
+        elif delta < -2.0:
+            trend = "DECLINING"
+            
+    factors = intel.get("score_factors", [])
+    return SessionScoreResponse(
+        session_id=id,
+        session_quality_score=intel["session_quality_score"],
+        session_quality=intel["session_quality"],
+        explanation=intel["session_quality_explanation"],
+        factors=factors,
+        score_factors=factors,
+        trend=trend,
+        delta=delta,
+        abandonment_probability=intel["abandonment_probability"],
+        friction_score=intel["friction_score"]
+    )
 
 # ==================================================
 # Matches
@@ -531,7 +755,17 @@ def get_auth_me():
 
 
 @app.post("/api/auth/login", tags=["Auth"])
-def auth_login():
+def auth_login(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(get_db)):
+    sid = payload.get("session_id") if payload else None
+    if sid:
+        sess = db.query(DBSession).filter(DBSession.id == sid).first()
+        if sess:
+            UserProfilingService.get_or_create_user(db, user_id="usr_demo")
+            sess.user_id = "usr_demo"
+            events = db.query(Event).filter(Event.session_id == sid).all()
+            for ev in events:
+                ev.user_id = "usr_demo"
+            db.commit()
     return {
         "ok": True,
         "token": "demo_jwt_token",
@@ -634,9 +868,36 @@ def list_events_feed(
     rows = (
         query.group_by(Event.match_id, Event.sport)
         .order_by(func.count(Event.id).desc())
-        .limit(60)
         .all()
     )
+
+    if status and status.lower() == "live":
+        # Historical events do not carry a live status. Keep the existing
+        # demo-live surface to one representative fixture rather than
+        # presenting the historical dataset as live.
+        rows = rows[:1]
+    elif sport and sport.lower() == "all":
+        # Keep the compact feed responsive while ensuring All is not
+        # dominated by the highest-volume sport.
+        rows_by_sport = {}
+        for row in rows:
+            rows_by_sport.setdefault(row[1], []).append(row)
+        balanced_rows = []
+        row_index = 0
+        while len(balanced_rows) < 60:
+            added = False
+            for sport_rows in rows_by_sport.values():
+                if row_index < len(sport_rows):
+                    balanced_rows.append(sport_rows[row_index])
+                    added = True
+                    if len(balanced_rows) == 60:
+                        break
+            if not added:
+                break
+            row_index += 1
+        rows = balanced_rows
+    else:
+        rows = rows[:60]
     
     now = datetime.datetime.utcnow()
     events_data = []
@@ -648,7 +909,7 @@ def list_events_feed(
             home, away = match_id, "Opponent"
             
         h_val = abs(hash(match_id))
-        is_live = (status and status.lower() == "live") or (idx % 7 == 0 and not status)
+        is_live = bool(status and status.lower() == "live")
         event_status = "LIVE" if is_live else "UPCOMING"
         
         odds_home = round(1.4 + (h_val % 25) / 10.0, 2)
@@ -784,8 +1045,88 @@ def list_bets(filter: Optional[str] = "open"):
 
 
 @app.post("/api/bets", tags=["Bets"])
-def place_bet():
-    return {"ok": True, "betId": f"bet_{uuid.uuid4().hex[:8]}"}
+def place_bet(payload: Optional[Dict[str, Any]] = None, db: Session = Depends(get_db)):
+    """
+    Enforces Machine 2 Gate on Bet Placement.
+    Backend evaluates age_verified, kyc_verified, self_excluded.
+    Rejects ineligible users with HTTP 403.
+    Tracks bet_confirmed and bet_cancelled events when session_id is provided.
+    """
+    sid = payload.get("session_id") if payload else None
+    uid = (payload.get("user_id") or payload.get("anonymous_user_id")) if payload else None
+    if not uid and sid:
+        sess = db.query(DBSession).filter(DBSession.id == sid).first()
+        if sess:
+            uid = sess.user_id
+    uid = uid or "usr_demo"
+    
+    user = db.query(UserProfile).filter(
+        (UserProfile.id == uid) | (UserProfile.anonymous_id == uid)
+    ).first()
+    
+    is_eligible = (user is not None) and user.age_verified and user.kyc_verified and not user.self_excluded
+    
+    if not is_eligible:
+        status_str = "SELF_EXCLUDED" if (user and user.self_excluded) else (
+            "AGE_RESTRICTED" if (user and not user.age_verified) else "KYC_REQUIRED"
+        )
+        reason_str = "Betting access is unavailable due to self-exclusion." if (user and user.self_excluded) else (
+            "18+ Age verification required before placing bets." if (user and not user.age_verified) else "Identity verification (KYC demo) required."
+        )
+        if sid:
+            blocked_event = Event(
+                session_id=sid,
+                user_id=uid,
+                timestamp=datetime.datetime.utcnow(),
+                event_type="action",
+                page="betslip",
+                action="bet_cancelled"
+            )
+            blocked_event.set_metadata({"reason": reason_str, "status": status_str})
+            db.add(blocked_event)
+            db.commit()
+            
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "eligible": False,
+                "status": status_str,
+                "reason": reason_str,
+                "message": f"Betting blocked by PULSYNC Compliance Gate: {reason_str}"
+            }
+        )
+
+    bet_id = f"bet_{uuid.uuid4().hex[:8]}"
+    if sid:
+        confirm_event = Event(
+            session_id=sid,
+            user_id=uid,
+            timestamp=datetime.datetime.utcnow(),
+            event_type="action",
+            page="betslip",
+            action="bet_confirmed"
+        )
+        confirm_event.set_metadata({
+            "bet_id": bet_id,
+            "amount": payload.get("amount", 10.0),
+            "selections": payload.get("selections", [])
+        })
+        db.add(confirm_event)
+        
+        sess = db.query(DBSession).filter(DBSession.id == sid).first()
+        if sess:
+            sess.user_id = uid
+            sess.total_actions = (sess.total_actions or 0) + 1
+            sess.total_events = (sess.total_events or 0) + 1
+        db.commit()
+
+    return {
+        "ok": True,
+        "eligible": True,
+        "betId": bet_id,
+        "status": "ACCEPTED",
+        "demo": True
+    }
 
 
 @app.get("/api/casino", tags=["Casino"])
@@ -862,3 +1203,67 @@ def get_ledger(q: Optional[str] = ""):
 def get_support_tickets():
     return {"tickets": []}
 
+
+# ==================================================
+# PULSYNC Session & ROI Intelligence API (Machine 4)
+# ==================================================
+@app.get("/api/impact/summary", tags=["Impact Intelligence"])
+def get_impact_summary():
+    """Returns top KPI summary, dataset facts, target segment metrics, and replay preview."""
+    return ImpactAnalyticsService.get_summary()
+
+
+@app.get("/api/impact/session-health", tags=["Impact Intelligence"])
+def get_impact_session_health():
+    """Returns session health funnel, durations, friction, quality, and daily trends."""
+    return ImpactAnalyticsService.get_session_health()
+
+
+@app.get("/api/impact/matrix", tags=["Impact Intelligence"])
+def get_impact_matrix():
+    """Returns 3x3 Transaction Intent vs Information Interest matrix."""
+    return ImpactAnalyticsService.get_matrix()
+
+
+@app.get("/api/impact/segments", tags=["Impact Intelligence"])
+def get_impact_segments():
+    """Returns 5 behavioral segments with metrics and shares."""
+    return ImpactAnalyticsService.get_segments()
+
+
+@app.get("/api/impact/replay", tags=["Impact Intelligence"])
+def get_impact_replay():
+    """Returns historical replay comparison between VALUE_SEEKING and RESPECT_EXIT cohorts with statistical test results."""
+    return ImpactAnalyticsService.get_replay()
+
+
+@app.get("/api/impact/opportunity", tags=["Impact Intelligence"])
+def get_impact_opportunity():
+    """Returns segment opportunity sizing for VALUE_SEEKING."""
+    return ImpactAnalyticsService.get_opportunity()
+
+
+@app.post("/api/impact/roi/simulate", tags=["Impact Intelligence"])
+def simulate_roi(payload: Optional[ROISimulationRequest] = None):
+    """Interactive ROI simulator supporting Conservative, Base, Optimistic scenarios and custom assumptions."""
+    assumptions = payload.model_dump() if payload else {}
+    return ImpactAnalyticsService.calculate_roi(assumptions)
+
+
+@app.get("/api/impact/impact-case", tags=["Impact Intelligence"])
+def get_impact_case(scenario: Optional[str] = "base"):
+    """Auto-generates the one-page executive Impact Case."""
+    return ImpactAnalyticsService.get_impact_case(scenario or "base")
+
+
+@app.get("/api/impact/methodology", tags=["Impact Intelligence"])
+def get_impact_methodology():
+    """Returns data methodology, definitions, and causal limitation disclaimers."""
+    data = ImpactAnalyticsService.get_raw_data()
+    return data.get("methodology", {})
+
+
+@app.get("/api/impact/metrics-chain", tags=["Impact Intelligence"])
+def get_impact_metrics_chain():
+    """Returns 4-level business metrics to follow and management signals."""
+    return ImpactAnalyticsService.get_metrics_chain()

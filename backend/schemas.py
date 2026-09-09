@@ -6,13 +6,14 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 # ==================================================
-# Compliance Schemas
+# Compliance Schemas (Machine 2)
 # ==================================================
 class AgeVerificationRequest(BaseModel):
     user_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
     age: Optional[int] = None
     birth_date: Optional[str] = None
-    verification_method: str = "mock_eudi_simulated"
+    verification_method: str = "DEMO_ATTRIBUTE"
 
 class AgeVerificationResponse(BaseModel):
     user_id: Optional[str] = None
@@ -26,15 +27,57 @@ class AgeVerificationResponse(BaseModel):
 class SelfExclusionRequest(BaseModel):
     user_id: Optional[str] = None
     anonymous_user_id: Optional[str] = None
-    national_registry_id: Optional[str] = None
+    demo_profile_id: Optional[str] = None
 
 class SelfExclusionResponse(BaseModel):
     user_id: Optional[str] = None
+    checked: bool = True
+    excluded: bool = False
     self_excluded: bool = False
     eligible: bool = True
+    source: str = "DEMO_REGISTER"
     status: str = "ACTIVE_NOT_EXCLUDED"
-    provider: str = "Simulated Mock Exclusion Registry (MVP)"
     timestamp: datetime = Field(default_factory=utc_now)
+
+class KYCDemoRequest(BaseModel):
+    user_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
+    document_type: str = "National ID" # National ID, Passport, Driving Licence
+
+class KYCDemoResponse(BaseModel):
+    user_id: Optional[str] = None
+    kyc_verified: bool = True
+    document_type: str = "National ID"
+    status: str = "VERIFIED"
+    demo: bool = True
+    notice: str = "Demo verification — no real identity data processed."
+    timestamp: datetime = Field(default_factory=utc_now)
+
+class BettingEligibilityRequest(BaseModel):
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    anonymous_user_id: Optional[str] = None
+
+class BettingEligibilityResponse(BaseModel):
+    user_id: Optional[str] = None
+    eligible: bool = True
+    age_verified: bool = True
+    kyc_verified: bool = True
+    self_excluded: bool = False
+    reason: str = "ELIGIBLE"
+    status: str = "ELIGIBLE" # PENDING_VERIFICATION, AGE_RESTRICTED, KYC_REQUIRED, SELF_EXCLUDED, ELIGIBLE, VERIFICATION_FAILED
+    demo: bool = True
+    timestamp: datetime = Field(default_factory=utc_now)
+
+class ComplianceStatusResponse(BaseModel):
+    user_id: str
+    anonymous_id: Optional[str] = None
+    betting_eligible: bool = True
+    age_verified: bool = True
+    kyc_verified: bool = True
+    self_excluded: bool = False
+    status: str = "ELIGIBLE"
+    verification_method: str = "DEMO_ATTRIBUTE"
 
 # ==================================================
 # User Schemas
@@ -42,16 +85,23 @@ class SelfExclusionResponse(BaseModel):
 class UserCreate(BaseModel):
     id: Optional[str] = None
     anonymous_id: Optional[str] = None
+    display_name: Optional[str] = "Sports Enthusiast"
+    email: Optional[str] = "fan@pulsync.ai"
     segment: Optional[str] = "Casual Explorer"
+    age: Optional[int] = 21
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: str
     anonymous_id: Optional[str] = None
+    display_name: Optional[str] = "Sports Enthusiast"
+    email: Optional[str] = "fan@pulsync.ai"
     segment: str
     age_verified: bool
+    kyc_verified: bool = False
     self_excluded: bool
+    eligibility_status: str = "PENDING_VERIFICATION"
     created_at: datetime
     sessions_count: Optional[int] = 0
     preferred_sport: Optional[str] = None
@@ -127,17 +177,54 @@ class SessionIntelligenceResponse(BaseModel):
     intent: str
     intent_confidence: float
     intent_reason: str
+    # Machine 3: transaction intent, information interest, engagement
+    transaction_intent: Optional[str] = "LOW"
+    information_interest: Optional[str] = "HIGH"
+    engagement_state: Optional[str] = "NORMAL"
+    recommendation_mode: Optional[str] = "NORMAL"
+    engagement_message: Optional[str] = None
+    explicit_exit: Optional[bool] = False
+    # Behavioural scores
     abandonment_probability: float
     abandonment_risk_level: str
     abandonment_reason: str
     friction_score: float
     friction_level: str
     friction_reason: str
+    session_quality: Optional[float] = None
     session_quality_score: float
     session_quality_explanation: str
+    # Detailed scoring breakdown and action metrics (Machine 3)
+    score_factors: Optional[List[Dict[str, Any]]] = []
+    actions_count: Optional[int] = 0
+    time_to_first_action_seconds: Optional[float] = None
+    last_action: Optional[str] = None
+    final_step_conversion: Optional[bool] = False
+    # Top-level compliance status
+    betting_eligible: Optional[bool] = False
+    age_verified: Optional[bool] = False
+    kyc_verified: Optional[bool] = False
+    self_excluded: Optional[bool] = False
+    updated_at: Optional[str] = None
+    # Guidance & recommendations
     guidance: GuidanceResponse
     top_recommendation: Optional[Dict[str, Any]] = None
+    recommendations: Optional[List[Dict[str, Any]]] = []
     intelligence: Optional[Dict[str, Any]] = None
+    # Compliance (from Machine 2 — read-only here)
+    compliance: Optional[Dict[str, Any]] = None
+
+class SessionScoreResponse(BaseModel):
+    session_id: str
+    session_quality_score: float
+    session_quality: float
+    explanation: str
+    factors: List[Dict[str, Any]] = []
+    score_factors: List[Dict[str, Any]] = []
+    trend: str = "STABLE" # IMPROVING, STABLE, DECLINING
+    delta: float = 0.0
+    abandonment_probability: float = 0.0
+    friction_score: float = 0.0
 
 # ==================================================
 # Recommendation Schemas
@@ -240,3 +327,17 @@ class DemoStartResponse(BaseModel):
     events_triggered: List[Dict[str, Any]]
     final_intelligence: SessionIntelligenceResponse
     message: str = "Demo session successfully executed through full behavioral cycle."
+
+# ==================================================
+# Impact & ROI Intelligence Schemas (Machine 4)
+# ==================================================
+class ROISimulationRequest(BaseModel):
+    scenario: Optional[str] = "base"
+    scenario_realization_pct: Optional[float] = 50.0
+    inference_cost_per_call: Optional[float] = 0.005
+    api_cost_per_call: Optional[float] = 0.002
+    hosting_cost_monthly: Optional[float] = 500.0
+    storage_cost_monthly: Optional[float] = 200.0
+    engineering_cost: Optional[float] = 25000.0
+    monthly_sessions: Optional[int] = 100000
+
