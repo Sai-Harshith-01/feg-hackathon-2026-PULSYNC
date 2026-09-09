@@ -5,12 +5,11 @@
 FEG Hackathon 2026 - Challenge 01: Session Quality and Session-to-Action
 Conversion.
 
-The current working prototype is a self-contained Next.js demo. Backend and
-AI services are separate workstreams and are not included in this branch.
+The integrated application consists of a Vue.js frontend and a FastAPI backend.
 
-## Demo frontend
+## Frontend
 
-The integrated mock frontend is a self-contained Next.js application in [`demo/`](demo/).
+The Vue frontend is in [`demo/`](demo/). Run it locally with pnpm:
 Run it with pnpm:
 
 ```powershell
@@ -19,10 +18,22 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000 to view the demo. The demo uses its included mock data and
-API routes; it does not require the backend or AI workstreams.
+Open http://localhost:3000 to view the frontend. The Vite development proxy forwards
+API requests to http://localhost:8000.
 
-### Run with Docker
+## Backend
+
+The FastAPI service is in [`backend/`](backend/). Run it locally from the repository
+root:
+
+```powershell
+pip install -r requirements.txt
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+```
+
+The API health endpoint is available at http://localhost:8000/api/health.
+
+## Run the complete stack with Docker Compose
 
 From the repository root:
 
@@ -30,7 +41,8 @@ From the repository root:
 docker compose up --build
 ```
 
-Open http://localhost:3000. Stop the container with `docker compose down`.
+Open http://localhost:3000. The API is available at http://localhost:8000.
+Stop the services with `docker compose down`.
 
 ## Repository structure
 
@@ -39,17 +51,18 @@ Open http://localhost:3000. Stop the container with `docker compose down`.
 ├── .github/
 │   └── workflows/
 ├── demo/
-│   ├── app/              # Next.js pages and mock API routes
-│   ├── components/       # UI components
-│   ├── lib/              # Client, session, domain, and server helpers
-│   ├── public/           # Static assets
-│   ├── screenshots/      # Submission screenshots
-│   ├── presentation/     # Submission presentation materials
-│   ├── .dockerignore
-│   ├── Dockerfile
-│   ├── next.config.mjs
+│   ├── src/              # Vue application source
+│   ├── public/            # Static assets
+│   ├── Dockerfile         # Vite build and Nginx runtime image
+│   ├── nginx.conf         # SPA fallback configuration
 │   ├── package.json
 │   └── pnpm-lock.yaml
+├── backend/
+│   ├── app/main.py        # FastAPI application and routes
+│   ├── services/          # Session intelligence and analytics services
+│   ├── tests/             # Backend tests
+│   ├── Dockerfile
+│   └── requirements.txt
 ├── docs/                 # Architecture, impact, compliance, and API contract
 ├── src/                  # Reserved for integrated application source
 ├── tests/                # Repository-level validation
@@ -57,33 +70,32 @@ Open http://localhost:3000. Stop the container with `docker compose down`.
 ├── config/               # Shared project configuration
 ├── docker-compose.yml
 ├── .env.example
+├── docker-compose.yml     # Frontend and backend orchestration
 ├── requirements.txt
 └── README.md
 ```
 
-The `demo/` application is currently self-contained and uses mock data and API
-routes. Backend and AI services can be integrated independently in their
-respective workstreams.
+The frontend consumes the FastAPI endpoints through `VITE_API_URL`. Docker Compose
+builds the frontend with `http://localhost:8000` so browser requests reach the
+published backend service.
 
 ## Technology stack
 
-- Frontend prototype: Next.js 16, React 19, TypeScript, Tailwind CSS
+- Frontend: Vue 3, Vite, TypeScript, Tailwind CSS
 - Package manager: pnpm
-- Local data and API behavior: mock services included in `demo/`
+- Backend: FastAPI, SQLAlchemy, SQLite by default
 - Containerization: Docker and Docker Compose
-- Planned workstreams: FastAPI/Python backend, Python AI/ML, Supabase/PostgreSQL
 
 ## Prerequisites
 
 - Node.js 22 or later
 - pnpm 10 or later
-- Docker Desktop (optional, for the containerized demo)
+- Docker Desktop with the Linux engine enabled
 
 ## Environment variables
 
-No environment variables are required for the current mock demo. Use
-[`.env.example`](.env.example) as the repository-level template when shared
-services are added.
+Use [`.env.example`](.env.example) for shared configuration. Set `VITE_API_URL`
+when running the frontend against a non-default backend URL.
 
 ## Testing
 
@@ -94,19 +106,6 @@ cd demo
 pnpm install --frozen-lockfile
 pnpm build
 ```
-
-## Demo flow
-
-Start at `/`, then explore the sports feed, event details, live view, wallet,
-my bets, promotions, support, and portal routes. The included API routes provide
-the mock data needed by the prototype.
-
-## Known limitations and future work
-
-The current demo does not connect to the separate backend, AI, or database
-workstreams. Authentication, settlement, analytics, and other interactions are
-mocked for the prototype. Future work will connect these surfaces through the
-agreed service contracts and add the team's submission media under `demo/`.
 
 ## Project documentation
 
