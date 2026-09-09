@@ -1,6 +1,6 @@
 # ⚡ PULSYNC
 
-> **FEG Hackathon 2026 — Challenge 01**
+> **FEG Hackathon 2026 — Challenge 01** 
 >
 > ### Session Quality & Session-to-Action Conversion
 
