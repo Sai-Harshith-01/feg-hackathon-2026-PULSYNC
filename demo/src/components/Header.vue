@@ -44,7 +44,7 @@
     </div>
 
     <!-- Right Controls -->
-    <div class="flex items-center gap-3">
+    <div class="hidden items-center gap-3 lg:flex">
       <router-link 
         to="/profile" 
         class="flex items-center gap-2 rounded border border-border bg-card px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-accent"
@@ -69,9 +69,26 @@
         <span>Impact & ROI</span>
       </router-link>
     </div>
+
+    <!-- Mobile Menu Toggle -->
+    <button @click="mobileMenuOpen = !mobileMenuOpen" class="block rounded p-1.5 text-slate-300 hover:bg-accent hover:text-white lg:hidden">
+      <Menu class="size-5" />
+    </button>
   </header>
+
+  <!-- Mobile Menu Dropdown -->
+  <div v-if="mobileMenuOpen" class="lg:hidden border-b border-border bg-[#0d111a] px-4 py-3 space-y-2">
+    <router-link to="/sport" @click="mobileMenuOpen = false" class="block rounded px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-accent hover:text-white">Sport</router-link>
+    <router-link to="/live" @click="mobileMenuOpen = false" class="block rounded px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-accent hover:text-white">Live</router-link>
+    <router-link to="/impact" @click="mobileMenuOpen = false" class="block rounded px-3 py-2 text-sm font-semibold text-emerald-400 hover:bg-accent hover:text-white">Impact & ROI</router-link>
+    <router-link to="/portal" @click="mobileMenuOpen = false" class="block rounded px-3 py-2 text-sm font-semibold text-blue-400 hover:bg-accent hover:text-white">Analytics Portal</router-link>
+    <router-link to="/profile" @click="mobileMenuOpen = false" class="block rounded px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-accent hover:text-white">Profile</router-link>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { User, Activity, TrendingUp } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { User, Activity, TrendingUp, Menu } from 'lucide-vue-next'
+
+const mobileMenuOpen = ref(false)
 </script>

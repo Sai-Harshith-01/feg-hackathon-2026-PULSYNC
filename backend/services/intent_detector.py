@@ -1,5 +1,6 @@
 from typing import List, Tuple
 from backend.models import Event
+from backend.ml.model_registry import ModelRegistry
 
 class IntentDetector:
     """Detects current user session intent, transaction intent, information interest, and engagement state."""
@@ -14,6 +15,42 @@ class IntentDetector:
         """
         if not events:
             return "EXPLORE", 0.50, "New session started with exploratory posture."
+            
+        registry = ModelRegistry()
+        if registry.is_loaded():
+            try:
+                # Extract features for ML
+                unique_sports = len(set(e.sport for e in events if e.sport))
+                unique_matches = len(set(e.match_id for e in events if e.match_id))
+                last_event = events[-1]
+                features = {
+                    "unique_sports_so_far": unique_sports,
+                    "unique_matches_so_far": unique_matches,
+                    "is_prematch": 1 if last_event.event_type == "PREMATCH" else 0,
+                    "is_live": 1 if last_event.event_type == "LIVE" else 0,
+                    "is_lottery": 1 if last_event.event_type == "WORLD_LOTTERY" else 0
+                }
+                
+                _, _, ml_intent, ml_conf, _ = registry.predict(features)
+                
+                # Use ML if confidence is above threshold
+                if ml_conf >= 0.40:
+                    reason_by_intent = {
+                        "COMPARE": "User is comparing team attributes, head-to-head records, and relative match forms.",
+                        "UNDERSTAND": "User is inspecting detailed match statistics and rules to understand context.",
+                        "ACT": "User is taking decisive action in the session.",
+                        "REVIEW": "User is navigating back and reviewing previously considered match information.",
+                        "EXPLORE": "User is actively exploring the fixture catalog across leagues and sports.",
+                    }
+                    reason = reason_by_intent.get(
+                        ml_intent,
+                        "User intent estimated from historical session behavior."
+                    )
+                    return ml_intent, ml_conf, f"ML Prediction ({registry.get_version()}): {reason}"
+            except Exception as e:
+                print(f"ML intent prediction failed: {e}. Falling back to heuristic.")
+                
+        # Heuristic fallback
             
         recent = events[-8:] # Analyze last 8 interactions
         event_types = [e.event_type.lower() if e.event_type else "" for e in recent]
@@ -147,4 +184,3 @@ class IntentDetector:
             return "RESPECT_EXIT", "RESPECT_EXIT"
         else:
             return "NORMAL", "NORMAL"
-

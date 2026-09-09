@@ -30,7 +30,7 @@
         <div class="rounded-md bg-slate-800/60 border border-slate-700/50 p-2 text-center">
           <div class="text-[10px] uppercase font-semibold text-slate-400 mb-1">Intent</div>
           <span class="text-xs font-bold text-purple-300 bg-purple-900/40 px-2 py-0.5 rounded">
-            {{ intel?.intent ?? '…' }}
+            {{ intel?.intent ?? '…' }} <span v-if="intel?.intent_confidence">· {{ (intel.intent_confidence * 100).toFixed(0) }}%</span>
           </span>
         </div>
         <!-- Engagement State -->
@@ -82,11 +82,13 @@
       </div>
 
       <!-- Score bar -->
-      <div class="mt-3 flex items-center gap-3 text-[11px] text-slate-400 border-t border-slate-800 pt-2">
-        <span>Quality: <b class="text-slate-200">{{ intel?.session_quality ?? intel?.session_quality_score ?? '—' }}</b></span>
-        <span>Friction: <b class="text-slate-200">{{ intel?.friction_level ?? '—' }}</b></span>
-        <span>Abandonment: <b class="text-slate-200">{{ ((intel?.abandonment_probability ?? 0) * 100).toFixed(0) }}%</b></span>
-        <span class="ml-auto text-[10px] text-slate-600">Mode: {{ intel?.recommendation_mode ?? '—' }}</span>
+      <div class="mt-3 flex items-center gap-3 text-[11px] text-slate-400 border-t border-slate-800 pt-2 flex-wrap">
+        <span>Session Quality: <b class="text-slate-200">{{ intel?.session_quality ?? intel?.session_quality_score ?? '—' }}</b></span>
+        <span>Abandonment Risk: <b class="text-slate-200">{{ ((intel?.abandonment_probability ?? 0) * 100).toFixed(0) }}%</b></span>
+        <span v-if="intel?.continuation_probability">Continuation: <b class="text-slate-200">{{ (intel.continuation_probability * 100).toFixed(0) }}%</b></span>
+        <span class="ml-auto text-[10px] font-mono text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-500/20">
+          Model: {{ intel?.model_versions ? 'ML ' + (intel.model_versions.intent || 'v1') : 'Heuristic' }}
+        </span>
       </div>
     </div>
 

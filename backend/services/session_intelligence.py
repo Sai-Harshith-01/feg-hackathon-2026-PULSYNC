@@ -71,7 +71,7 @@ class SessionIntelligenceService:
         session.friction_score = friction_score
         session.friction_level = friction_level
 
-        abandonment_prob, risk_level, abandonment_reason = AbandonmentEngine.calculate_risk(
+        abandonment_prob, risk_level, abandonment_reason, abandonment_model_source = AbandonmentEngine.calculate_risk_detailed(
             all_events, session.duration_seconds, friction_score)
         session.abandonment_probability = abandonment_prob
 
@@ -79,6 +79,26 @@ class SessionIntelligenceService:
             all_events, friction_score, abandonment_prob
         )
         session.session_quality_score = quality_score
+        
+        # Calculate Continuation explicitly via registry
+        from backend.ml.model_registry import ModelRegistry
+        registry = ModelRegistry()
+        ml_continuation_prob = round(1.0 - abandonment_prob, 2)
+        intent_probs = {}
+        if registry.is_loaded() and all_events:
+            try:
+                features = {
+                    "unique_sports_so_far": len(set(e.sport for e in all_events if e.sport)),
+                    "unique_matches_so_far": len(set(e.match_id for e in all_events if e.match_id)),
+                    "is_prematch": 1 if all_events[-1].event_type == "PREMATCH" else 0,
+                    "is_live": 1 if all_events[-1].event_type == "LIVE" else 0,
+                    "is_lottery": 1 if all_events[-1].event_type == "WORLD_LOTTERY" else 0
+                }
+                _, prob_cont, _, _, probs_dict = registry.predict(features)
+                ml_continuation_prob = round(prob_cont, 2)
+                intent_probs = probs_dict
+            except:
+                pass
 
         # Action and conversion metrics
         action_events = [
@@ -172,7 +192,7 @@ class SessionIntelligenceService:
 
         intent, intent_conf, intent_reason = IntentDetector.detect_intent(all_events)
         friction_score, friction_level, friction_reason = FrictionEngine.calculate_friction(all_events)
-        abandonment_prob, risk_level, abandonment_reason = AbandonmentEngine.calculate_risk(
+        abandonment_prob, risk_level, abandonment_reason, abandonment_model_source = AbandonmentEngine.calculate_risk_detailed(
             all_events, session.duration_seconds, friction_score)
         quality_score, quality_reason, score_factors = SessionQualityEngine.evaluate_quality_detailed(
             all_events, friction_score, abandonment_prob
@@ -243,7 +263,8 @@ class SessionIntelligenceService:
                         friction_score, friction_level, friction_reason, quality_score, quality_reason,
                         score_factors=None, actions_count=0, time_to_first_action=None,
                         last_action=None, final_step_conversion=False,
-                        guidance, top_rec, recommendations, hist_profile, compliance) -> Dict[str, Any]:
+                        guidance, top_rec, recommendations, hist_profile, compliance,
+                        ml_continuation_prob=None, intent_probs=None, abandonment_model_source=None) -> Dict[str, Any]:
         engagement_message = None
         if engagement_state == "VALUE_SEEKING":
             engagement_message = "No problem. Still interested in the match?"
@@ -252,26 +273,39 @@ class SessionIntelligenceService:
         elif engagement_state == "LOW_PRESSURE":
             engagement_message = "Take your time. Here's more information about this fixture."
 
+        from backend.ml.model_registry import ModelRegistry
+        registry = ModelRegistry()
+        
         return {
             "session_id": session_id,
             "user_id": session.user_id,
             "intent": intent,
             "intent_confidence": round(intent_conf, 2),
             "intent_reason": intent_reason,
+            "intent_probabilities": intent_probs or {},
             "transaction_intent": transaction_intent,
             "information_interest": information_interest,
             "engagement_state": engagement_state,
             "recommendation_mode": recommendation_mode,
-            "explicit_exit": explicit_exit,
-            "engagement_message": engagement_message,
-            "abandonment_probability": round(abandonment_prob, 2),
-            "abandonment_risk_level": risk_level,
-            "abandonment_reason": abandonment_reason,
             "friction_score": friction_score,
             "friction_level": friction_level,
             "friction_reason": friction_reason,
+            "abandonment_probability": abandonment_prob,
+            "abandonment_risk": risk_level,
+            "abandonment_reason": abandonment_reason,
+            "continuation_probability": ml_continuation_prob if ml_continuation_prob is not None else round(1.0 - abandonment_prob, 2),
+            "session_quality_score": quality_score,
+            "session_quality_reason": quality_reason,
+            "model_source": abandonment_model_source or "heuristic_fallback",
+            "model_versions": {
+                "intent": registry.get_version(),
+                "abandonment": registry.get_version(),
+                "continuation": registry.get_version()
+            } if registry.is_loaded() else None,
+            "explicit_exit": explicit_exit,
+            "engagement_message": engagement_message,
+            "abandonment_risk_level": risk_level,
             "session_quality": round(quality_score, 1),
-            "session_quality_score": round(quality_score, 1),
             "session_quality_explanation": quality_reason,
             "score_factors": score_factors or [],
             "actions_count": actions_count,
