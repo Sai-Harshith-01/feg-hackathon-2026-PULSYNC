@@ -652,14 +652,22 @@ def record_outcome(payload: OutcomeCreate, db: Session = Depends(get_db)):
     db.refresh(outcome)
     return outcome
 
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+PROCESSED_DATA_DIR = os.path.join(REPO_ROOT, "data", "processed")
+
+
 def load_processed_json(filename: str, fallback: Optional[Any] = None):
-    filepath = os.path.join("data", "processed", filename)
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
+    candidates = [
+        os.path.join(PROCESSED_DATA_DIR, filename),
+        os.path.join("data", "processed", filename),
+    ]
+    for filepath in candidates:
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                continue
     return fallback if fallback is not None else {}
 
 
@@ -814,14 +822,20 @@ def list_sports_rail(db: Session = Depends(get_db)):
         })
 
     if not sports:
-        sports = [
-            {"id": "football", "slug": "football", "name": "Football", "eventCount": 5731, "liveCount": 3},
-            {"id": "tennis", "slug": "tennis", "name": "Tennis", "eventCount": 1992, "liveCount": 1},
-            {"id": "basketball", "slug": "basketball", "name": "Basketball", "eventCount": 362, "liveCount": 0},
-            {"id": "baseball", "slug": "baseball", "name": "Baseball", "eventCount": 189, "liveCount": 0},
-            {"id": "ice_hockey", "slug": "ice_hockey", "name": "Ice Hockey", "eventCount": 370, "liveCount": 0}
-        ]
-        
+        summary = load_processed_json("sports_summary.json", [])
+        for item in summary:
+            sport_name = item.get("sport") if isinstance(item, dict) else None
+            if not sport_name or sport_name in ["World Lotteries", "TOP OFFER"]:
+                continue
+            slug = get_sport_slug(sport_name)
+            sports.append({
+                "id": slug,
+                "slug": slug,
+                "name": sport_name,
+                "eventCount": item.get("activity_count", 0),
+                "liveCount": 1 if sport_name in ["Football", "Tennis", "Basketball"] else 0
+            })
+
     return {"sports": sports}
 
 
@@ -870,6 +884,21 @@ def list_events_feed(
         .order_by(func.count(Event.id).desc())
         .all()
     )
+
+    if not rows:
+        summary = load_processed_json("events_summary.json", [])
+        compact_rows = []
+        for item in summary:
+            if not isinstance(item, dict):
+                continue
+            sport_name = item.get("sport") or ""
+            match_id = item.get("event_name") or ""
+            if not match_id or sport_name in ["World Lotteries", "TOP OFFER"]:
+                continue
+            if sport and sport.lower() != "all" and get_sport_slug(sport_name) != sport.lower():
+                continue
+            compact_rows.append((match_id, sport_name, item.get("activity_count", 0)))
+        rows = compact_rows
 
     if status and status.lower() == "live":
         # Historical events do not carry a live status. Keep the existing

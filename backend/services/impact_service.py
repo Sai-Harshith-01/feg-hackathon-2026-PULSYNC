@@ -5,7 +5,9 @@ from typing import Dict, Any, List, Optional
 class ImpactAnalyticsService:
     """Service for PULSYNC Session & ROI Intelligence Layer."""
     
-    IMPACT_DATA_PATH = os.path.join("data", "processed", "impact_metrics.json")
+    IMPACT_DATA_PATH = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "data", "processed", "impact_metrics.json")
+    )
     
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
